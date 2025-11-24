@@ -253,6 +253,18 @@
       color: var(--tg-theme-text-color, #fff);
     }
     
+    .btn-preset {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      border: 2px solid transparent;
+    }
+    
+    .btn-preset.active {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+      border-color: var(--tg-theme-button-color, #3390ec);
+    }
+    
     .limb-selector {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -366,6 +378,11 @@
           <span class="toggle-label">Stitch Style (Hashed)</span>
           <div class="toggle-switch active" id="stitchStyleToggle"></div>
         </div>
+      </div>
+      <div class="tool-section-title" style="margin-top: 16px;">Animation</div>
+      <div class="button-group" style="flex-direction: column; gap: 8px;">
+        <button class="btn-preset" id="animDefault">Default</button>
+        <button class="btn-preset" id="animWave">Wave</button>
       </div>
     </div>
     
@@ -660,6 +677,32 @@
         updatePreview();
       });
       
+      // Animation selection
+      const animDefault = document.getElementById("animDefault");
+      const animWave = document.getElementById("animWave");
+      
+      function updateAnimationButtons() {
+        animDefault.classList.toggle("active", state.animation === "Default");
+        animWave.classList.toggle("active", state.animation === "Wave");
+      }
+      
+      animDefault.addEventListener("click", () => {
+        if (state.animation !== "Default") {
+          state.animation = "Default";
+          updateAnimationButtons();
+          loadAndRenderAnimation();
+        }
+      });
+      
+      animWave.addEventListener("click", () => {
+        if (state.animation !== "Wave") {
+          state.animation = "Wave";
+          updateAnimationButtons();
+          loadAndRenderAnimation();
+        }
+      });
+      
+      updateAnimationButtons();
     }
 
     function setupButtons() {
@@ -736,6 +779,14 @@
         if (baseAnimationData) {
           loadAndRenderAnimation();
         }
+      }
+      
+      // Update animation buttons if they exist
+      if (document.getElementById("animDefault")) {
+        const animDefault = document.getElementById("animDefault");
+        const animWave = document.getElementById("animWave");
+        animDefault.classList.toggle("active", state.animation === "Default");
+        animWave.classList.toggle("active", state.animation === "Wave");
       }
       
       updateGlobalColors();
