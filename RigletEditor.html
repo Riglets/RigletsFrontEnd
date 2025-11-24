@@ -5,6 +5,7 @@
   <title>Riglet Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -56,6 +57,13 @@
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
+    }
+    
+    #lottieContainer {
+      width: 100%;
+      height: 100%;
+      max-width: 300px;
+      max-height: 300px;
     }
     
     .tools-container {
@@ -264,9 +272,9 @@
   
   <div class="preview-container">
     <div class="preview-placeholder" id="previewPlaceholder">
-      Your Riglet preview will appear here
+      Loading Riglet preview...
     </div>
-    <img class="preview-image hidden" id="previewImage" alt="Riglet Preview" />
+    <div id="lottieContainer" class="hidden"></div>
   </div>
   
   <div class="tools-container">
@@ -398,11 +406,58 @@
     const limbs = ["Head", "Body", "Left_Arm", "Right_Arm", "Left_Leg", "Right_Leg"];
     const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds"];
 
+    // Riglet groups mapping (matches bot.py)
+    const RIGLET_GROUPS = {
+      "Head": {
+        "fill": ["StrokeFill"],
+        "stroke": ["Stroke", "StrokeFill"],
+        "stitch": ["Stitch"],
+      },
+      "Left_Arm": {
+        "fill": ["Fill"],
+        "stroke": ["Stroke"],
+        "stitch": ["Stitch"],
+      },
+      "Right_Arm": {
+        "fill": ["Fill"],
+        "stroke": ["Stroke"],
+        "stitch": ["Stitch"],
+      },
+      "Left_Leg": {
+        "fill": ["Fill", "StrokeFill"],
+        "stroke": ["Stroke", "StrokeFill"],
+        "stitch": ["Stitch"],
+      },
+      "Right_Leg": {
+        "fill": ["Fill"],
+        "stroke": ["Stroke"],
+        "stitch": ["Stitch1", "Stitch2"],
+      },
+      "Body": {
+        "fill": ["StrokeFill"],
+        "stroke": ["StrokeFill"],
+      },
+    };
+
+    const ACCESSORY_LAYERS = {
+      "Halo": ["halofront", "haloback"],
+      "Heart": ["Heart"],
+      "Wings": ["Wings", "Wings 2"],
+      "CherryStem": ["CherryStem"],
+      "Bow": ["Bow"],
+      "Seeds": ["Seeds"],
+    };
+
+    const STITCH_DASH_LENGTH = 10.0;
+
     let currentLimb = null;
     let isAdvancedMode = false;
+    let baseAnimationData = null;
+    let lottieInstance = null;
+    let updateTimeout = null;
 
     // Initialize UI
-    function init() {
+    async function init() {
       setupPresets();
       setupLimbSelector();
       setupAccessories();
@@ -419,6 +474,9 @@
           console.log("No saved state found");
         }
       }
+      
+      // Load and render the animation
+      await loadAndRenderAnimation();
     }
 
     function setupPresets() {
@@ -434,6 +492,7 @@
           } else {
             applyGlobalColor("fill", preset.hex);
           }
+          // Preview update is handled by applyColorToLimb/applyGlobalColor
         });
         container.appendChild(btn);
       });
@@ -459,7 +518,7 @@
 
     function setupAccessories() {
       const container = document.getElementById("accessoriesGroup");
-      accessories.forEach(acc => {
+      accessories.forEach((acc, idx) => {
         const row = document.createElement("div");
         row.className = "toggle-row";
         
@@ -469,9 +528,15 @@
         
         const toggle = document.createElement("div");
         toggle.className = "toggle-switch";
+        if (state.accessories[acc]) {
+          toggle.classList.add("active");
+        }
+        
+        // Add event listener directly here
         toggle.addEventListener("click", () => {
           state.accessories[acc] = !state.accessories[acc];
           toggle.classList.toggle("active", state.accessories[acc]);
+          updatePreview();
         });
         
         row.appendChild(label);
@@ -508,6 +573,12 @@
         callback(val);
       });
       
+      colorInput.addEventListener("change", (e) => {
+        const val = e.target.value.toUpperCase();
+        hexInput.value = val;
+        callback(val);
+      });
+      
       hexInput.addEventListener("input", (e) => {
         let val = e.target.value.toUpperCase();
         if (!val.startsWith("#")) val = "#" + val;
@@ -532,12 +603,14 @@
       stitchToggle.addEventListener("click", () => {
         state.stitch_hashed = !state.stitch_hashed;
         stitchToggle.classList.toggle("active", state.stitch_hashed);
+        updatePreview();
       });
       
       const patchToggle = document.getElementById("patchToggle");
       patchToggle.addEventListener("click", () => {
         state.use_patch = !state.use_patch;
         patchToggle.classList.toggle("active", state.use_patch);
+        updatePreview();
       });
     }
 
@@ -553,6 +626,14 @@
       });
     }
 
+    function hexToRgba(hex) {
+      hex = hex.replace("#", "");
+      const r = parseInt(hex.substring(0, 2), 16) / 255;
+      const g = parseInt(hex.substring(2, 4), 16) / 255;
+      const b = parseInt(hex.substring(4, 6), 16) / 255;
+      return [r, g, b, 1];
+    }
+
     function applyGlobalColor(kind, hex) {
       limbs.forEach(limb => {
         if (state.colors[limb][kind] !== undefined) {
@@ -560,12 +641,14 @@
         }
       });
       updateGlobalColors();
+      updatePreview();
     }
 
     function applyColorToLimb(limb, kind, hex) {
       if (state.colors[limb] && state.colors[limb][kind] !== undefined) {
         state.colors[limb][kind] = hex;
         updateAdvancedColors();
+        updatePreview();
       }
     }
 
@@ -596,7 +679,13 @@
       if (savedState.stitch_hashed !== undefined) state.stitch_hashed = savedState.stitch_hashed;
       if (savedState.use_patch !== undefined) state.use_patch = savedState.use_patch;
       if (savedState.accessories) state.accessories = savedState.accessories;
-      if (savedState.animation) state.animation = savedState.animation;
+      if (savedState.animation) {
+        state.animation = savedState.animation;
+        // Reload animation if it changed
+        if (baseAnimationData) {
+          loadAndRenderAnimation();
+        }
+      }
       
       updateGlobalColors();
       document.getElementById("stitchStyleToggle").classList.toggle("active", state.stitch_hashed);
@@ -604,8 +693,163 @@
       
       accessories.forEach((acc, idx) => {
         const toggle = document.querySelectorAll("#accessoriesGroup .toggle-switch")[idx];
-        toggle.classList.toggle("active", state.accessories[acc]);
+        if (toggle) {
+          toggle.classList.toggle("active", state.accessories[acc]);
+        }
       });
+      
+      // Update preview if animation is already loaded
+      if (baseAnimationData) {
+        updatePreview();
+      }
+    }
+
+    async function loadAndRenderAnimation() {
+      try {
+        const animationFile = state.animation === "Wave" ? "RigletBase.json" : "RigletTurn.json";
+        const url = `https://riglets.github.io/RigletsFrontEnd/${animationFile}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load animation: ${response.statusText}`);
+        }
+        
+        baseAnimationData = await response.json();
+        updatePreview();
+      } catch (error) {
+        console.error("Error loading animation:", error);
+        document.getElementById("previewPlaceholder").textContent = "Failed to load preview";
+      }
+    }
+
+    function applyColorsToAnimation(data, colors, stitchHashed) {
+      // Deep clone the data
+      const animData = JSON.parse(JSON.stringify(data));
+      
+      // Apply colors
+      for (const layer of animData.layers || []) {
+        const layerName = layer.nm;
+        if (!RIGLET_GROUPS[layerName]) continue;
+        
+        const limbDef = RIGLET_GROUPS[layerName];
+        const colorDef = colors[layerName] || {};
+        
+        for (const shape of layer.shapes || []) {
+          if (shape.ty !== "gr") continue;
+          
+          const groupName = shape.nm;
+          const targets = [];
+          
+          if (limbDef.fill && limbDef.fill.includes(groupName)) {
+            const fillColor = colorDef.fill;
+            if (fillColor) targets.push({ kind: "fill", color: fillColor });
+          }
+          
+          if (limbDef.stroke && limbDef.stroke.includes(groupName)) {
+            const strokeColor = colorDef.stroke;
+            if (strokeColor) targets.push({ kind: "stroke", color: strokeColor });
+          }
+          
+          if (limbDef.stitch && limbDef.stitch.includes(groupName)) {
+            const stitchColor = colorDef.stitch;
+            if (stitchColor) targets.push({ kind: "stitch", color: stitchColor });
+          }
+          
+          for (const target of targets) {
+            const rgba = hexToRgba(target.color);
+            
+            for (const it of shape.it || []) {
+              const ty = it.ty;
+              
+              if (ty === "fl" && target.kind === "fill") {
+                if (it.c && it.c.k) {
+                  it.c.k = rgba;
+                }
+              }
+              
+              if (ty === "st" && (target.kind === "stroke" || target.kind === "stitch")) {
+                if (it.c && it.c.k) {
+                  it.c.k = rgba;
+                }
+              
+                if (target.kind === "stitch") {
+                  if (stitchHashed) {
+                    it.d = [
+                      { n: "d", v: { a: 0, k: STITCH_DASH_LENGTH } },
+                      { n: "o", v: { a: 0, k: 0 } }
+                    ];
+                  } else {
+                    if (it.d) delete it.d;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Apply accessories visibility
+      for (const layer of animData.layers || []) {
+        const layerName = layer.nm;
+        for (const [accName, layerNames] of Object.entries(ACCESSORY_LAYERS)) {
+          if (layerNames.includes(layerName)) {
+            layer.hd = !state.accessories[accName];
+          }
+        }
+      }
+      
+      // Apply patch visibility - remove TGpatch from Left_Leg if patch is off
+      for (const layer of animData.layers || []) {
+        if (layer.nm === "Left_Leg" && layer.shapes) {
+          layer.shapes = layer.shapes.filter(shape => {
+            if (shape.nm === "TGpatch" && !state.use_patch) {
+              return false; // Remove patch
+            }
+            return true; // Keep other shapes
+          });
+        }
+      }
+      
+      return animData;
+    }
+
+    function updatePreview() {
+      if (!baseAnimationData) return;
+      
+      // Debounce updates for performance
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      
+      updateTimeout = setTimeout(() => {
+        try {
+          const coloredData = applyColorsToAnimation(
+            baseAnimationData,
+            state.colors,
+            state.stitch_hashed
+          );
+          
+          // Hide placeholder, show container
+          document.getElementById("previewPlaceholder").classList.add("hidden");
+          document.getElementById("lottieContainer").classList.remove("hidden");
+          
+          // Destroy existing instance
+          if (lottieInstance) {
+            lottieInstance.destroy();
+          }
+          
+          // Create new instance with updated data
+          lottieInstance = lottie.loadAnimation({
+            container: document.getElementById("lottieContainer"),
+            renderer: "svg",
+            loop: true,
+            autoplay: true,
+            animationData: coloredData
+          });
+        } catch (error) {
+          console.error("Error updating preview:", error);
+        }
+      }, 100); // 100ms debounce for smooth updates
     }
 
     function sendState(action) {
