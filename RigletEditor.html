@@ -273,6 +273,138 @@
     .hidden {
       display: none;
     }
+    
+    /* Draw feature styles */
+    .draw-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .btn-draw {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    
+    .btn-edit-shape {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    
+    .btn-reset-shape {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    
+    .draw-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+      padding: 16px;
+    }
+    
+    .draw-modal:not(.hidden) {
+      display: flex;
+    }
+    
+    .draw-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      color: var(--tg-theme-text-color, #fff);
+    }
+    
+    .draw-canvas-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-theme-bg-color, #222);
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 0;
+    }
+    
+    #drawCanvas {
+      flex: 1;
+      border: 2px solid var(--tg-theme-hint-color, #444);
+      border-radius: 8px;
+      background: #fff;
+      cursor: crosshair;
+      touch-action: none;
+      max-width: 100%;
+      max-height: 400px;
+    }
+    
+    .draw-tools {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    
+    .draw-tool-btn {
+      padding: 8px 12px;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+      border: 1px solid var(--tg-theme-hint-color, #444);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    
+    .draw-tool-btn.active {
+      background: var(--tg-theme-button-color, #3390ec);
+      border-color: var(--tg-theme-button-color, #3390ec);
+    }
+    
+    .draw-colors {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .draw-color-input {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .draw-color-input label {
+      font-size: 12px;
+      min-width: 50px;
+    }
+    
+    .draw-color-input input[type="color"] {
+      width: 40px;
+      height: 40px;
+    }
+    
+    .draw-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    
+    .draw-actions button {
+      flex: 1;
+      padding: 12px;
+    }
   </style>
 </head>
 <body>
@@ -351,6 +483,41 @@
       <div class="toggle-group" id="accessoriesGroup"></div>
     </div>
     
+    <!-- Draw Modal -->
+    <div class="draw-modal hidden" id="drawModal">
+      <div class="draw-header">
+        <h3 style="margin: 0; font-size: 16px;">Draw Custom Shape</h3>
+        <button class="btn-secondary" id="closeDrawModal" style="padding: 8px 16px; font-size: 14px;">✕ Close</button>
+      </div>
+      <div class="draw-canvas-container">
+        <div class="draw-tools">
+          <button class="draw-tool-btn active" id="toolPen" data-tool="pen">✏️ Vector Pen</button>
+          <button class="draw-tool-btn" id="toolClear" data-tool="clear">🗑️ Clear</button>
+          <button class="draw-tool-btn" id="toolClosePath" data-tool="close">✓ Close Path</button>
+        </div>
+        <div style="font-size: 11px; color: var(--tg-theme-hint-color, #888); margin-bottom: 8px; padding: 4px;">
+          Click to place points. Lines connect automatically. Click "Close Path" when done.
+        </div>
+        <div class="draw-colors">
+          <div class="draw-color-input">
+            <label>Fill:</label>
+            <input type="color" id="drawFillColor" value="#FF0000" />
+            <input type="text" class="color-hex" id="drawFillHex" value="#FF0000" maxlength="7" style="min-width: 70px; font-size: 12px; padding: 6px;" />
+          </div>
+          <div class="draw-color-input">
+            <label>Stroke:</label>
+            <input type="color" id="drawStrokeColor" value="#000000" />
+            <input type="text" class="color-hex" id="drawStrokeHex" value="#000000" maxlength="7" style="min-width: 70px; font-size: 12px; padding: 6px;" />
+          </div>
+        </div>
+        <canvas id="drawCanvas" width="300" height="300"></canvas>
+        <div class="draw-actions">
+          <button class="btn-secondary" id="cancelDraw">Cancel</button>
+          <button class="btn-done" id="saveDraw">Save Shape</button>
+        </div>
+      </div>
+    </div>
+    
     <!-- Options -->
     <div class="tool-section">
       <div class="tool-section-title">Options</div>
@@ -424,7 +591,8 @@
         Seeds: false,
         TGpatch: false
       },
-      animation: "Default"
+      animation: "Default",
+      customShapes: {} // Store custom drawn shapes: { "Heart": { path: "...", fill: "#...", stroke: "#..." } }
     };
 
 
@@ -494,6 +662,12 @@
       console.log("=== INIT STARTING ===");
       console.log("Setting up UI components...");
       
+      // Ensure draw modal is hidden on init
+      const drawModal = document.getElementById("drawModal");
+      if (drawModal) {
+        drawModal.classList.add("hidden");
+      }
+      
       setupLimbSelector();
       setupAccessories();
       setupColorInputs();
@@ -550,6 +724,11 @@
         label.className = "toggle-label";
         label.textContent = acc;
         
+        const rightSide = document.createElement("div");
+        rightSide.style.display = "flex";
+        rightSide.style.alignItems = "center";
+        rightSide.style.gap = "8px";
+        
         const toggle = document.createElement("div");
         toggle.className = "toggle-switch";
         if (state.accessories[acc]) {
@@ -563,8 +742,47 @@
           updatePreview();
         });
         
+        rightSide.appendChild(toggle);
+        
+        // Add Draw button for Heart accessory
+        if (acc === "Heart") {
+          const drawBtn = document.createElement("button");
+          drawBtn.className = "btn-draw";
+          drawBtn.textContent = "Draw";
+          drawBtn.style.padding = "6px 10px";
+          drawBtn.style.fontSize = "11px";
+          drawBtn.addEventListener("click", () => {
+            openDrawModal("Heart");
+          });
+          rightSide.appendChild(drawBtn);
+          
+          // Add Reset button if custom shape exists
+          if (state.customShapes && state.customShapes["Heart"]) {
+            const resetBtn = document.createElement("button");
+            resetBtn.className = "btn-reset-shape";
+            resetBtn.textContent = "Reset";
+            resetBtn.style.padding = "6px 10px";
+            resetBtn.style.fontSize = "11px";
+            resetBtn.addEventListener("click", () => {
+              resetCustomShape("Heart");
+            });
+            rightSide.appendChild(resetBtn);
+            
+            // Add Edit button if custom shape exists
+            const editBtn = document.createElement("button");
+            editBtn.className = "btn-edit-shape";
+            editBtn.textContent = "Edit";
+            editBtn.style.padding = "6px 10px";
+            editBtn.style.fontSize = "11px";
+            editBtn.addEventListener("click", () => {
+              openDrawModal("Heart", true);
+            });
+            rightSide.appendChild(editBtn);
+          }
+        }
+        
         row.appendChild(label);
-        row.appendChild(toggle);
+        row.appendChild(rightSide);
         container.appendChild(row);
       });
     }
@@ -668,6 +886,671 @@
         // Send final state and close
         sendState("done");
       });
+      
+      // Draw modal buttons
+      setupDrawModal();
+    }
+    
+    // Vector Pen Tool functionality
+    let drawCanvas = null;
+    let drawCtx = null;
+    let vectorPoints = []; // Array of {x, y} points
+    let isPathClosed = false;
+    let hoverPoint = null; // For showing hover state
+    let selectedPointIndex = -1; // For editing points
+    let currentShapeName = null;
+    let isEditMode = false;
+    const POINT_RADIUS = 5; // Visual size of points
+    const POINT_HIT_RADIUS = 8; // Hit detection radius
+    
+    function setupDrawModal() {
+      drawCanvas = document.getElementById("drawCanvas");
+      if (!drawCanvas) {
+        console.warn("Draw canvas not found");
+        return;
+      }
+      
+      drawCtx = drawCanvas.getContext("2d");
+      if (!drawCtx) {
+        console.warn("Could not get canvas context");
+        return;
+      }
+      
+      // Set canvas size - use fixed size for consistency
+      const maxSize = 300;
+      drawCanvas.width = maxSize;
+      drawCanvas.height = maxSize;
+      
+      // Initialize white background
+      drawCtx.fillStyle = "#FFFFFF";
+      drawCtx.fillRect(0, 0, maxSize, maxSize);
+      
+      // Tool buttons
+      const toolButtons = document.querySelectorAll(".draw-tool-btn");
+      if (toolButtons.length > 0) {
+        toolButtons.forEach(btn => {
+          btn.addEventListener("click", () => {
+            if (btn.dataset.tool === "clear") {
+              clearCanvas();
+              return;
+            }
+            if (btn.dataset.tool === "close") {
+              closePath();
+              return;
+            }
+            document.querySelectorAll(".draw-tool-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+          });
+        });
+      }
+      
+      // Color inputs
+      setupColorInput("drawFillColor", "drawFillHex", (val) => {
+        redrawVectorPath();
+      });
+      setupColorInput("drawStrokeColor", "drawStrokeHex", (val) => {
+        redrawVectorPath();
+      });
+      
+      // Vector pen tool - click to place points
+      drawCanvas.addEventListener("click", handleCanvasClick);
+      drawCanvas.addEventListener("mousemove", handleCanvasHover);
+      drawCanvas.style.cursor = "crosshair";
+      
+      // Touch events for mobile
+      drawCanvas.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        handleCanvasClick(e);
+      });
+      
+      // Modal controls - check if elements exist
+      const closeBtn = document.getElementById("closeDrawModal");
+      const cancelBtn = document.getElementById("cancelDraw");
+      const saveBtn = document.getElementById("saveDraw");
+      
+      if (closeBtn) {
+        closeBtn.addEventListener("click", closeDrawModal);
+      } else {
+        console.warn("Close draw modal button not found");
+      }
+      
+      if (cancelBtn) {
+        cancelBtn.addEventListener("click", closeDrawModal);
+      } else {
+        console.warn("Cancel draw button not found");
+      }
+      
+      if (saveBtn) {
+        saveBtn.addEventListener("click", saveDrawnShape);
+      } else {
+        console.warn("Save draw button not found");
+      }
+    }
+    
+    function openDrawModal(shapeName, editMode = false) {
+      currentShapeName = shapeName;
+      isEditMode = editMode;
+      const modal = document.getElementById("drawModal");
+      if (modal) {
+        modal.classList.remove("hidden");
+      } else {
+        console.error("Draw modal not found");
+        return;
+      }
+      
+      clearCanvas();
+      
+      // If editing, load existing shape
+      if (editMode && state.customShapes && state.customShapes[shapeName]) {
+        const shape = state.customShapes[shapeName];
+        document.getElementById("drawFillColor").value = shape.fill || "#FF0000";
+        document.getElementById("drawFillHex").value = shape.fill || "#FF0000";
+        document.getElementById("drawStrokeColor").value = shape.stroke || "#000000";
+        document.getElementById("drawStrokeHex").value = shape.stroke || "#000000";
+        
+        // Redraw the path if we have it
+        if (shape.pathData) {
+          redrawPathFromData(shape.pathData);
+        }
+      } else {
+        // Reset to defaults
+        document.getElementById("drawFillColor").value = "#FF0000";
+        document.getElementById("drawFillHex").value = "#FF0000";
+        document.getElementById("drawStrokeColor").value = "#000000";
+        document.getElementById("drawStrokeHex").value = "#000000";
+      }
+    }
+    
+    function closeDrawModal() {
+      const modal = document.getElementById("drawModal");
+      if (modal) {
+        modal.classList.add("hidden");
+      }
+      currentShapeName = null;
+      isEditMode = false;
+      vectorPoints = [];
+      isPathClosed = false;
+      hoverPoint = null;
+      selectedPointIndex = -1;
+    }
+    
+    function resetCustomShape(shapeName) {
+      if (!state.customShapes) {
+        state.customShapes = {};
+      }
+      
+      // Remove the custom shape
+      if (state.customShapes[shapeName]) {
+        delete state.customShapes[shapeName];
+        console.log("Reset custom shape for", shapeName);
+        
+        // Refresh accessories UI to remove Reset and Edit buttons
+        const container = document.getElementById("accessoriesGroup");
+        container.innerHTML = "";
+        setupAccessories();
+        
+        // Update preview to show original shape
+        updatePreview();
+      }
+    }
+    
+    function clearCanvas() {
+      if (!drawCtx) return;
+      vectorPoints = [];
+      isPathClosed = false;
+      hoverPoint = null;
+      selectedPointIndex = -1;
+      redrawVectorPath();
+    }
+    
+    function closePath() {
+      if (vectorPoints.length >= 3) {
+        isPathClosed = true;
+        redrawVectorPath();
+      } else {
+        alert("Need at least 3 points to close the path!");
+      }
+    }
+    
+    function getCanvasCoordinates(e) {
+      if (!drawCanvas) return { x: 0, y: 0 };
+      
+      const rect = drawCanvas.getBoundingClientRect();
+      const canvasWidth = drawCanvas.width;
+      const canvasHeight = drawCanvas.height;
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+      
+      // Calculate scale factors
+      const scaleX = canvasWidth / displayWidth;
+      const scaleY = canvasHeight / displayHeight;
+      
+      let clientX, clientY;
+      
+      if (e.offsetX !== undefined && e.offsetY !== undefined) {
+        // Mouse event with offsetX/Y (most accurate)
+        clientX = e.offsetX;
+        clientY = e.offsetY;
+      } else if (e.touches && e.touches.length > 0) {
+        // Touch event
+        clientX = e.touches[0].clientX - rect.left;
+        clientY = e.touches[0].clientY - rect.top;
+      } else if (e.clientX !== undefined && e.clientY !== undefined) {
+        // Mouse event without offsetX/Y
+        clientX = e.clientX - rect.left;
+        clientY = e.clientY - rect.top;
+      } else {
+        return { x: 0, y: 0 };
+      }
+      
+      // Scale to canvas coordinates
+      const x = clientX * scaleX;
+      const y = clientY * scaleY;
+      
+      return { x, y };
+    }
+    
+    function handleCanvasClick(e) {
+      if (!drawCtx || !drawCanvas) return;
+      
+      const coords = getCanvasCoordinates(e);
+      const x = coords.x;
+      const y = coords.y;
+      
+      // Check if clicking on existing point (for editing)
+      const clickedPointIndex = findPointAt(x, y);
+      
+      if (clickedPointIndex >= 0) {
+        // Clicked on existing point - could allow dragging in future
+        selectedPointIndex = clickedPointIndex;
+      } else {
+        // Add new point
+        vectorPoints.push({ x, y });
+        isPathClosed = false; // Reset closed state when adding points
+        selectedPointIndex = -1;
+      }
+      
+      redrawVectorPath();
+    }
+    
+    function handleCanvasHover(e) {
+      if (!drawCtx || !drawCanvas) return;
+      
+      const coords = getCanvasCoordinates(e);
+      const x = coords.x;
+      const y = coords.y;
+      
+      const pointIndex = findPointAt(x, y);
+      hoverPoint = pointIndex >= 0 ? pointIndex : null;
+      
+      redrawVectorPath();
+    }
+    
+    function findPointAt(x, y) {
+      for (let i = 0; i < vectorPoints.length; i++) {
+        const point = vectorPoints[i];
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= POINT_HIT_RADIUS) {
+          return i;
+        }
+      }
+      return -1;
+    }
+    
+    function redrawVectorPath() {
+      if (!drawCtx || !drawCanvas) return;
+      
+      // Clear canvas
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      drawCtx.fillStyle = "#FFFFFF";
+      drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+      
+      if (vectorPoints.length === 0) return;
+      
+      const fillColorInput = document.getElementById("drawFillColor");
+      const strokeColorInput = document.getElementById("drawStrokeColor");
+      const fillColor = fillColorInput ? fillColorInput.value : "#FF0000";
+      const strokeColor = strokeColorInput ? strokeColorInput.value : "#000000";
+      
+      // Draw the path
+      if (vectorPoints.length >= 2) {
+        drawCtx.beginPath();
+        drawCtx.moveTo(vectorPoints[0].x, vectorPoints[0].y);
+        
+        for (let i = 1; i < vectorPoints.length; i++) {
+          drawCtx.lineTo(vectorPoints[i].x, vectorPoints[i].y);
+        }
+        
+        // Close path if requested and we have enough points
+        if (isPathClosed && vectorPoints.length >= 3) {
+          drawCtx.closePath();
+          
+          // Fill the shape
+          drawCtx.fillStyle = fillColor;
+          drawCtx.fill();
+        }
+        
+        // Draw stroke
+        drawCtx.strokeStyle = strokeColor;
+        drawCtx.lineWidth = 2;
+        drawCtx.lineCap = "round";
+        drawCtx.lineJoin = "round";
+        drawCtx.stroke();
+      }
+      
+      // Draw points
+      vectorPoints.forEach((point, index) => {
+        drawCtx.beginPath();
+        drawCtx.arc(point.x, point.y, POINT_RADIUS, 0, Math.PI * 2);
+        
+        // Highlight hovered or selected point
+        if (index === hoverPoint || index === selectedPointIndex) {
+          drawCtx.fillStyle = "#3390ec";
+          drawCtx.fill();
+          drawCtx.strokeStyle = "#fff";
+          drawCtx.lineWidth = 2;
+          drawCtx.stroke();
+        } else {
+          drawCtx.fillStyle = strokeColor;
+          drawCtx.fill();
+          drawCtx.strokeStyle = "#fff";
+          drawCtx.lineWidth = 1;
+          drawCtx.stroke();
+        }
+      });
+      
+      // Draw preview line to mouse if path not closed
+      if (!isPathClosed && vectorPoints.length > 0 && hoverPoint === null) {
+        // This would require tracking mouse position, but for now we'll skip it
+        // to keep it simple
+      }
+    }
+    
+    function redrawPathFromData(pathData) {
+      // This would redraw a saved path - for now we'll just clear and let user redraw
+      // In a full implementation, you'd parse the SVG path and redraw it
+      clearCanvas();
+    }
+    
+    
+    function applyCustomShapeToLayer(layer, customShape) {
+      // Find the shape group and path element
+      // Heart layer structure: layer -> shapes[] -> shape group -> it[] -> path element
+      if (!layer.shapes || !Array.isArray(layer.shapes)) {
+        console.warn("Layer", layer.nm, "has no shapes array");
+        return;
+      }
+      
+      console.log("Applying custom shape to layer:", layer.nm, "shapes:", layer.shapes.length);
+      let pathFound = false;
+      let fillFound = false;
+      let strokeFound = false;
+      
+      for (const shape of layer.shapes) {
+        if (shape.ty !== "gr") {
+          console.log("Skipping non-group shape:", shape.ty);
+          continue; // Not a group
+        }
+        
+        // Look for path elements in the group
+        if (!shape.it || !Array.isArray(shape.it)) {
+          console.log("Shape group has no items array");
+          continue;
+        }
+        
+        console.log("Found shape group:", shape.nm || "unnamed", "items:", shape.it.length);
+        
+        for (const it of shape.it) {
+          if (!it || !it.ty) continue;
+          
+          if (it.ty === "sh") { // Shape/path element
+            pathFound = true;
+            // Store original path for reference (to get position/scale)
+            const originalPath = it.ks;
+            console.log("Found path element (sh), original path:", originalPath ? "exists" : "missing");
+            if (originalPath && originalPath.k && originalPath.k.v) {
+              console.log("Original path has", originalPath.k.v.length, "vertices");
+              if (originalPath.k.v.length > 0) {
+                console.log("Original first vertex:", originalPath.k.v[0]);
+              }
+            }
+            
+            // Convert SVG path to Lottie path format
+            const lottiePath = convertSVGPathToLottie(customShape.path, drawCanvas.width, drawCanvas.height, originalPath);
+            if (lottiePath && lottiePath.k) {
+              // Ensure the path structure is correct
+              if (lottiePath.k.v && Array.isArray(lottiePath.k.v) && lottiePath.k.v.length >= 3) {
+                it.ks = lottiePath;
+                console.log("✓ Applied custom path with", lottiePath.k.v.length, "vertices");
+                console.log("  First vertex:", lottiePath.k.v[0]);
+                console.log("  Last vertex:", lottiePath.k.v[lottiePath.k.v.length - 1]);
+              } else {
+                console.error("✗ Invalid Lottie path structure:", lottiePath);
+              }
+            } else {
+              console.error("✗ Failed to convert path to Lottie format");
+            }
+          } else if (it.ty === "fl") { // Fill element
+            fillFound = true;
+            const rgba = hexToRgba(customShape.fill);
+            if (it.c && it.c.k !== undefined) {
+              it.c.k = [rgba[0], rgba[1], rgba[2]]; // RGB only
+              console.log("✓ Applied fill color:", customShape.fill, "-> RGB:", [rgba[0], rgba[1], rgba[2]]);
+            } else {
+              console.warn("Fill element has no color property");
+            }
+          } else if (it.ty === "st") { // Stroke element
+            strokeFound = true;
+            const rgba = hexToRgba(customShape.stroke);
+            if (it.c && it.c.k !== undefined) {
+              it.c.k = [rgba[0], rgba[1], rgba[2]]; // RGB only
+              console.log("✓ Applied stroke color:", customShape.stroke, "-> RGB:", [rgba[0], rgba[1], rgba[2]]);
+            } else {
+              console.warn("Stroke element has no color property");
+            }
+          }
+        }
+      }
+      
+      if (!pathFound) {
+        console.error("✗ No path element (sh) found in layer", layer.nm);
+      }
+      if (!fillFound) {
+        console.warn("⚠ No fill element (fl) found in layer", layer.nm);
+      }
+      if (!strokeFound) {
+        console.warn("⚠ No stroke element (st) found in layer", layer.nm);
+      }
+    }
+    
+    function convertSVGPathToLottie(svgPath, canvasWidth, canvasHeight, originalPath = null) {
+      // Lottie path format requires vertices, inTangents, and outTangents
+      // Format: { "a": 0, "k": { "v": [[x,y],...], "i": [[x,y],...], "o": [[x,y],...], "c": true } }
+      
+      // Parse SVG path commands (simplified - handles M, L, Z)
+      const commands = svgPath.match(/[MLZ][^MLZ]*/g) || [];
+      const points = [];
+      
+      let currentX = 0;
+      let currentY = 0;
+      
+      for (const cmd of commands) {
+        const type = cmd[0];
+        const coords = cmd.slice(1).trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+        
+        if (type === "M" && coords.length >= 2) {
+          // Move to
+          currentX = coords[0];
+          currentY = coords[1];
+          points.push([currentX, currentY]);
+        } else if (type === "L" && coords.length >= 2) {
+          // Line to
+          currentX = coords[0];
+          currentY = coords[1];
+          points.push([currentX, currentY]);
+        } else if (type === "Z") {
+          // Close path - ensure first and last points match
+          if (points.length > 0) {
+            const first = points[0];
+            const last = points[points.length - 1];
+            if (first[0] !== last[0] || first[1] !== last[1]) {
+              points.push([first[0], first[1]]);
+            }
+          }
+        }
+      }
+      
+      if (points.length < 3) return null; // Need at least 3 points for a valid shape
+      
+      // Find bounding box of drawn path
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const [x, y] of points) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+      
+      const width = maxX - minX;
+      const height = maxY - minY;
+      
+      if (width === 0 || height === 0) return null;
+      
+      const centerPathX = (minX + maxX) / 2;
+      const centerPathY = (minY + maxY) / 2;
+      
+      // Try to match the original Heart's scale and position if available
+      let targetSize = 60; // Default Heart size
+      let offsetX = 0;
+      let offsetY = 0;
+      
+      if (originalPath && originalPath.k && originalPath.k.v && originalPath.k.v.length > 0) {
+        // Get original path bounds to match scale
+        const origVertices = originalPath.k.v;
+        let origMinX = Infinity, origMinY = Infinity, origMaxX = -Infinity, origMaxY = -Infinity;
+        for (const [x, y] of origVertices) {
+          origMinX = Math.min(origMinX, x);
+          origMinY = Math.min(origMinY, y);
+          origMaxX = Math.max(origMaxX, x);
+          origMaxY = Math.max(origMaxY, y);
+        }
+        const origWidth = origMaxX - origMinX;
+        const origHeight = origMaxY - origMinY;
+        const origCenterX = (origMinX + origMaxX) / 2;
+        const origCenterY = (origMinY + origMaxY) / 2;
+        
+        // Match the original size
+        if (origWidth > 0 && origHeight > 0) {
+          const scaleX = origWidth / width;
+          const scaleY = origHeight / height;
+          const scale = Math.min(scaleX, scaleY) * 0.8; // Slightly smaller to fit
+          
+          // Convert points to match original position and scale
+          const vertices = points.map(([x, y]) => {
+            const centeredX = (x - centerPathX) * scale;
+            const centeredY = (y - centerPathY) * scale;
+            return [centeredX + origCenterX, centeredY + origCenterY];
+          });
+          
+          const inTangents = vertices.map(() => [0, 0]);
+          const outTangents = vertices.map(() => [0, 0]);
+          
+          console.log("Converted path using original bounds:", {
+            originalBounds: { width: origWidth, height: origHeight, center: [origCenterX, origCenterY] },
+            newBounds: { width, height, center: [centerPathX, centerPathY] },
+            scale: scale,
+            firstVertex: vertices[0]
+          });
+          
+          return {
+            a: 0,
+            k: {
+              v: vertices,
+              i: inTangents,
+              o: outTangents,
+              c: true
+            }
+          };
+        }
+      }
+      
+      // Fallback: scale to fit typical Heart size
+      const scale = Math.min(targetSize / width, targetSize / height);
+      
+      // Convert points to Lottie coordinates (center at origin and scale)
+      const vertices = points.map(([x, y]) => {
+        const centeredX = (x - centerPathX) * scale;
+        const centeredY = (y - centerPathY) * scale;
+        return [centeredX, centeredY];
+      });
+      
+      console.log("Converted path (fallback):", {
+        canvasBounds: { width, height, center: [centerPathX, centerPathY] },
+        scale: scale,
+        firstVertex: vertices[0],
+        vertexCount: vertices.length
+      });
+      
+      // For simple polygons without curves, tangents are [0, 0]
+      // Lottie requires inTangents and outTangents for each vertex
+      const inTangents = vertices.map(() => [0, 0]);
+      const outTangents = vertices.map(() => [0, 0]);
+      
+      // Lottie path format with proper structure
+      return {
+        a: 0, // Not animated
+        k: {
+          v: vertices,      // Vertices (actual points)
+          i: inTangents,    // In tangents (bezier control points - [0,0] for straight lines)
+          o: outTangents,   // Out tangents (bezier control points - [0,0] for straight lines)
+          c: true           // Closed path
+        }
+      };
+    }
+    
+    function saveDrawnShape() {
+      if (!currentShapeName || vectorPoints.length < 3) {
+        alert("Please add at least 3 points and close the path!");
+        return;
+      }
+      
+      if (!isPathClosed) {
+        alert("Please close the path before saving!");
+        return;
+      }
+      
+      const fillColor = document.getElementById("drawFillColor").value.toUpperCase();
+      const strokeColor = document.getElementById("drawStrokeColor").value.toUpperCase();
+      const svgPath = convertPathToSVG();
+      
+      if (!svgPath) {
+        alert("Could not create path. Please try again.");
+        return;
+      }
+      
+      // Test the Lottie conversion
+      const testLottiePath = convertSVGPathToLottie(svgPath, drawCanvas.width, drawCanvas.height);
+      if (!testLottiePath || !testLottiePath.k || !testLottiePath.k.v) {
+        alert("Error creating Lottie path. Please try again.");
+        console.error("Lottie path conversion failed:", testLottiePath);
+        return;
+      }
+      
+      // Save to state
+      if (!state.customShapes) {
+        state.customShapes = {};
+      }
+      
+      state.customShapes[currentShapeName] = {
+        path: svgPath,
+        fill: fillColor,
+        stroke: strokeColor,
+        pathData: vectorPoints // Store vector points for editing
+      };
+      
+      // Enable the accessory if it's not already enabled
+      if (!state.accessories[currentShapeName]) {
+        state.accessories[currentShapeName] = true;
+        console.log("Enabled", currentShapeName, "accessory");
+        // Update the toggle visually
+        const heartRow = document.querySelector("#accessoriesGroup .toggle-row");
+        if (heartRow) {
+          const toggle = heartRow.querySelector(".toggle-switch");
+          if (toggle) {
+            toggle.classList.add("active");
+          }
+        }
+      } else {
+        console.log(currentShapeName, "accessory already enabled");
+      }
+      
+      // Refresh accessories UI to show Edit button
+      const container = document.getElementById("accessoriesGroup");
+      container.innerHTML = "";
+      setupAccessories();
+      
+      closeDrawModal();
+      updatePreview();
+    }
+    
+    function convertPathToSVG() {
+      if (vectorPoints.length < 2) return null;
+      
+      // Convert vector points to SVG path string
+      let pathString = `M ${vectorPoints[0].x} ${vectorPoints[0].y} `;
+      
+      for (let i = 1; i < vectorPoints.length; i++) {
+        pathString += `L ${vectorPoints[i].x} ${vectorPoints[i].y} `;
+      }
+      
+      // Close the path if it was closed
+      if (isPathClosed && vectorPoints.length >= 3) {
+        pathString += "Z";
+      }
+      
+      return pathString;
     }
 
     function hexToRgba(hex) {
@@ -733,6 +1616,7 @@
           loadAndRenderAnimation();
         }
       }
+      if (savedState.customShapes) state.customShapes = savedState.customShapes;
       
       // Update animation buttons if they exist
       if (document.getElementById("animDefault")) {
@@ -995,12 +1879,20 @@
         }
       }
       
-      // Apply accessories visibility
+      // Apply accessories visibility and custom shapes
       for (const layer of animData.layers || []) {
         const layerName = layer.nm;
         for (const [accName, layerNames] of Object.entries(ACCESSORY_LAYERS)) {
           if (layerNames.includes(layerName)) {
-            layer.hd = !state.accessories[accName];
+            const isEnabled = state.accessories[accName];
+            layer.hd = !isEnabled;
+            
+            // If this is a custom drawn shape, replace the path
+            // Only apply if the accessory is enabled
+            if (isEnabled && state.customShapes && state.customShapes[accName] && layerName === accName) {
+              console.log("Applying custom shape to", layerName, "custom shape:", state.customShapes[accName]);
+              applyCustomShapeToLayer(layer, state.customShapes[accName]);
+            }
           }
         }
       }
@@ -1240,7 +2132,8 @@
         stitch_hashed: state.stitch_hashed,
         use_patch: state.accessories.TGpatch, // Map TGpatch to use_patch for bot compatibility
         accessories: state.accessories,
-        animation: state.animation
+        animation: state.animation,
+        customShapes: state.customShapes || {}
       };
       
       if (tg) {
@@ -1309,4 +2202,6 @@
   </script>
 </body>
 </html>
+
+
 
