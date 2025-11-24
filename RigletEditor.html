@@ -43,10 +43,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 16px;
       background: var(--tg-theme-bg-color, #111);
-      min-height: 200px;
+      min-height: 180px;
       position: relative;
+      overflow: hidden;
     }
     
     .preview-placeholder {
@@ -64,8 +65,8 @@
     #lottieContainer {
       width: 100%;
       height: 100%;
-      max-width: 300px;
-      max-height: 300px;
+      max-width: 240px;
+      max-height: 240px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -75,8 +76,8 @@
     #lottieContainer svg {
       width: 100% !important;
       height: 100% !important;
-      max-width: 300px !important;
-      max-height: 300px !important;
+      max-width: 240px !important;
+      max-height: 240px !important;
       display: block !important;
       visibility: visible !important;
     }
@@ -365,10 +366,6 @@
           <span class="toggle-label">Stitch Style (Hashed)</span>
           <div class="toggle-switch active" id="stitchStyleToggle"></div>
         </div>
-        <div class="toggle-row">
-          <span class="toggle-label">Patch</span>
-          <div class="toggle-switch" id="patchToggle"></div>
-        </div>
       </div>
     </div>
     
@@ -394,8 +391,8 @@
         console.log("Telegram WebApp object: available");
         
         if (tg) {
-          tg.ready();
-          tg.expand();
+    tg.ready();
+    tg.expand();
           console.log("Telegram WebApp initialized");
         }
       } else {
@@ -420,14 +417,14 @@
         Body: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" }
       },
       stitch_hashed: true,
-      use_patch: false,
       accessories: {
         Halo: false,
         Heart: false,
         Wings: false,
         CherryStem: false,
         Bow: false,
-        Seeds: false
+        Seeds: false,
+        TGpatch: false
       },
       animation: "Default"
     };
@@ -444,7 +441,7 @@
     ];
 
     const limbs = ["Head", "Body", "Left_Arm", "Right_Arm", "Left_Leg", "Right_Leg"];
-    const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds"];
+    const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds", "TGpatch"];
 
     // Riglet groups mapping (matches bot.py)
     const RIGLET_GROUPS = {
@@ -663,12 +660,6 @@
         updatePreview();
       });
       
-      const patchToggle = document.getElementById("patchToggle");
-      patchToggle.addEventListener("click", () => {
-        state.use_patch = !state.use_patch;
-        patchToggle.classList.toggle("active", state.use_patch);
-        updatePreview();
-      });
     }
 
     function setupButtons() {
@@ -734,7 +725,10 @@
     function loadState(savedState) {
       if (savedState.colors) state.colors = savedState.colors;
       if (savedState.stitch_hashed !== undefined) state.stitch_hashed = savedState.stitch_hashed;
-      if (savedState.use_patch !== undefined) state.use_patch = savedState.use_patch;
+      // Handle legacy use_patch - migrate to TGpatch accessory
+      if (savedState.use_patch !== undefined) {
+        state.accessories.TGpatch = savedState.use_patch;
+      }
       if (savedState.accessories) state.accessories = savedState.accessories;
       if (savedState.animation) {
         state.animation = savedState.animation;
@@ -746,12 +740,11 @@
       
       updateGlobalColors();
       document.getElementById("stitchStyleToggle").classList.toggle("active", state.stitch_hashed);
-      document.getElementById("patchToggle").classList.toggle("active", state.use_patch);
       
       accessories.forEach((acc, idx) => {
         const toggle = document.querySelectorAll("#accessoriesGroup .toggle-switch")[idx];
         if (toggle) {
-          toggle.classList.toggle("active", state.accessories[acc]);
+        toggle.classList.toggle("active", state.accessories[acc]);
         }
       });
       
@@ -814,8 +807,11 @@
     }
 
     function applyColorsToAnimation(data, colors, stitchHashed) {
-      // Deep clone the data
+      // Deep clone the data to avoid modifying the original
+      // Use the same approach as bot.py - load fresh JSON structure
       const animData = JSON.parse(JSON.stringify(data));
+      
+      console.log("Applying stitch_hashed:", stitchHashed);
       
       // Apply colors
       for (const layer of animData.layers || []) {
@@ -965,24 +961,27 @@
                   console.warn(`  ⚠ No stroke color property (it.c) found for ${layerName}/${groupName}`);
                 }
               
-                if (target.kind === "stitch" && it.d !== undefined) {
+                // Process stitch dash - only for stroke elements (ty === "st")
+                // Match bot.py structure exactly: it["d"] = [{"n": "d", "v": {"a": 0, "k": STITCH_DASH_LENGTH}}, {"n": "o", "v": {"a": 0, "k": 0}}]
+                // The bot does: it["d"] = [...] directly, and it.pop("d", None) to remove
+                // NOTE: Temporarily disabled - Lottie-web has issues with programmatically added dash arrays
+                // The structure is correct but causes "Cannot redefine property: undefined" errors
+                // Dash arrays will still work when sent to bot (bot creates file, not browser Lottie)
+                if (target.kind === "stitch" && ty === "st" && false) {
                   if (stitchHashed) {
-                    // Only modify dash if it exists
-                    if (Array.isArray(it.d)) {
-                      const dashProp = it.d.find(p => p && p.n === "d");
-                      if (dashProp && dashProp.v) {
-                        if (typeof dashProp.v === 'object' && dashProp.v.k !== undefined) {
-                          dashProp.v.k = STITCH_DASH_LENGTH;
-                        }
-                      }
-                    }
+                    // Apply dash array - match bot.py exactly
+                    // Bot does: it["d"] = [{"n": "d", "v": {"a": 0, "k": STITCH_DASH_LENGTH}}, {"n": "o", "v": {"a": 0, "k": 0}}]
+                    it.d = [
+                      { n: "d", v: { a: 0, k: STITCH_DASH_LENGTH } },
+                      { n: "o", v: { a: 0, k: 0 } }
+                    ];
+                    console.log(`  ✓ Applied dash array to stitch ${layerName}/${groupName}`);
                   } else {
-                    // Remove dash array
-                    if (Array.isArray(it.d)) {
-                      it.d = it.d.filter(p => p && p.n !== "d" && p.n !== "o");
-                      if (it.d.length === 0) {
-                        delete it.d;
-                      }
+                    // Remove dash array - match bot.py: it.pop("d", None)
+                    // In JavaScript, we use delete instead of pop
+                    if (it.d !== undefined) {
+                      delete it.d;
+                      console.log(`  ✓ Removed dash array from stitch ${layerName}/${groupName}`);
                     }
                   }
                 }
@@ -1006,7 +1005,7 @@
       for (const layer of animData.layers || []) {
         if (layer.nm === "Left_Leg" && layer.shapes) {
           layer.shapes = layer.shapes.filter(shape => {
-            if (shape.nm === "TGpatch" && !state.use_patch) {
+            if (shape.nm === "TGpatch" && !state.accessories.TGpatch) {
               return false; // Remove patch
             }
             return true; // Keep other shapes
@@ -1014,7 +1013,18 @@
         }
       }
       
-      return animData;
+      // Re-serialize and parse to ensure clean structure (like bot.py writes to file then reads)
+      // This ensures Lottie gets a completely fresh object without any internal references
+      // The bot writes JSON to file then reads it, which gives a clean structure
+      try {
+        const serialized = JSON.stringify(animData);
+        const cleaned = JSON.parse(serialized);
+        console.log("Animation data cleaned and re-parsed (like bot.py file write/read)");
+        return cleaned;
+      } catch (e) {
+        console.error("Error cleaning animation data:", e);
+        return animData;
+      }
     }
 
     function updatePreview() {
@@ -1103,7 +1113,7 @@
           // Set explicit size based on animation dimensions
           if (coloredData.w && coloredData.h) {
             const aspectRatio = coloredData.w / coloredData.h;
-            const maxSize = 300;
+            const maxSize = 240; // Optimized for MiniApp display
             let width, height;
             if (aspectRatio > 1) {
               width = maxSize;
@@ -1189,8 +1199,8 @@
               }
               
               // Try to force visibility
-              svg.style.width = '300px';
-              svg.style.height = '300px';
+              svg.style.width = '240px';
+              svg.style.height = '240px';
               svg.style.display = 'block';
               svg.style.visibility = 'visible';
               svg.style.opacity = '1';
@@ -1224,16 +1234,16 @@
         action: action,
         colors: state.colors,
         stitch_hashed: state.stitch_hashed,
-        use_patch: state.use_patch,
+        use_patch: state.accessories.TGpatch, // Map TGpatch to use_patch for bot compatibility
         accessories: state.accessories,
         animation: state.animation
       };
       
       if (tg) {
-        tg.sendData(JSON.stringify(data));
-        
-        if (action === "done") {
-          tg.close();
+      tg.sendData(JSON.stringify(data));
+      
+      if (action === "done") {
+        tg.close();
         }
       } else {
         console.error("Telegram WebApp not available, cannot send data");
@@ -1255,7 +1265,7 @@
           if (typeof lottie !== 'undefined') {
             clearInterval(checkLottie);
             console.log("Lottie loaded, initializing app...");
-            init();
+    init();
           }
         }, 100);
         
