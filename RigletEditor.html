@@ -634,7 +634,7 @@
 
     const ACCESSORY_LAYERS = {
       "Halo": ["halofront", "haloback"],
-      "Heart": ["Heart"],
+      "Heart": ["Heart", "CustomHeart"], // CustomHeart is used for custom drawn shapes
       "Wings": ["Wings", "Wings 2"],
       "CherryStem": ["CherryStem"],
       "Bow": ["Bow"],
@@ -1237,7 +1237,10 @@
     
     function applyCustomShapeToLayer(layer, customShape) {
       // Find the shape group and path element
-      // Heart layer structure: layer -> shapes[] -> shape group -> it[] -> path element
+      // CustomHeart layer structure can be:
+      // Option 1: layer -> shapes[] -> shape group -> it[] -> path/fill/stroke elements
+      // Option 2: layer -> shapes[] -> direct path/fill/stroke elements (no group)
+      // Looking for: Path 1 (sh), Fill 1 (fl), Stroke 1 (st)
       if (!layer.shapes || !Array.isArray(layer.shapes)) {
         console.warn("Layer", layer.nm, "has no shapes array");
         return;
@@ -1248,28 +1251,172 @@
       let fillFound = false;
       let strokeFound = false;
       
-      for (const shape of layer.shapes) {
-        if (shape.ty !== "gr") {
-          console.log("Skipping non-group shape:", shape.ty);
-          continue; // Not a group
-        }
-        
-        // Look for path elements in the group
-        if (!shape.it || !Array.isArray(shape.it)) {
-          console.log("Shape group has no items array");
-          continue;
-        }
-        
-        console.log("Found shape group:", shape.nm || "unnamed", "items:", shape.it.length);
-        
-        for (const it of shape.it) {
-          if (!it || !it.ty) continue;
+      // First, check if shapes are directly in layer.shapes (no group)
+      const directShapes = layer.shapes.filter(s => s.ty === "sh" || s.ty === "fl" || s.ty === "st");
+      if (directShapes.length > 0) {
+        console.log("Found direct shapes (no group), processing:", directShapes.length);
+        for (const shape of directShapes) {
+          if (!shape || !shape.ty) continue;
           
-          if (it.ty === "sh") { // Shape/path element
+          // Look for "Path 1", "Fill 1", "Stroke 1" by name or type
+          const itemName = shape.nm || "";
+          const isPath1 = shape.ty === "sh" && (itemName === "Path 1" || itemName.includes("Path") || !itemName);
+          const isFill1 = shape.ty === "fl" && (itemName === "Fill 1" || itemName.includes("Fill") || !itemName);
+          const isStroke1 = shape.ty === "st" && (itemName === "Stroke 1" || itemName.includes("Stroke") || !itemName);
+          
+          if (isPath1) {
+            pathFound = true;
+            // Store original path for reference (to get position/scale)
+            const originalPath = shape.ks;
+            console.log("Found path element (sh) -", itemName || "unnamed", "original path:", originalPath ? "exists" : "missing");
+            if (originalPath && originalPath.k && originalPath.k.v) {
+              console.log("Original path has", originalPath.k.v.length, "vertices");
+              if (originalPath.k.v.length > 0) {
+                console.log("Original first vertex:", originalPath.k.v[0]);
+              }
+            }
+            
+            // Convert SVG path to Lottie path format
+            const lottiePath = convertSVGPathToLottie(customShape.path, drawCanvas.width, drawCanvas.height, originalPath);
+            if (lottiePath && lottiePath.k) {
+              // Ensure the path structure is correct
+              if (lottiePath.k.v && Array.isArray(lottiePath.k.v) && lottiePath.k.v.length >= 3) {
+                shape.ks = lottiePath;
+                console.log("✓ Applied custom path with", lottiePath.k.v.length, "vertices");
+                console.log("  First vertex:", lottiePath.k.v[0]);
+                console.log("  Last vertex:", lottiePath.k.v[lottiePath.k.v.length - 1]);
+              } else {
+                console.error("✗ Invalid Lottie path structure:", lottiePath);
+              }
+            } else {
+              console.error("✗ Failed to convert path to Lottie format");
+            }
+          } else if (isFill1) {
+            fillFound = true;
+            console.log("Found fill element (fl) -", itemName || "unnamed");
+            const rgba = hexToRgba(customShape.fill);
+            const rgb = [rgba[0], rgba[1], rgba[2]]; // RGB only
+            
+            if (shape.c) {
+              // Handle both static and animated colors
+              if (shape.c.k !== undefined && shape.c.k !== null) {
+                if (Array.isArray(shape.c.k) && (shape.c.k.length === 3 || shape.c.k.length === 4) && typeof shape.c.k[0] === 'number') {
+                  // Static RGB/RGBA array
+                  shape.c.k = rgb;
+                  console.log("✓ Applied fill color (static):", customShape.fill, "-> RGB:", rgb);
+                } else if (Array.isArray(shape.c.k) && shape.c.k.length > 0) {
+                  // Check if animated (keyframes)
+                  const firstItem = shape.c.k[0];
+                  if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                    // Animated with keyframes
+                    shape.c.k = shape.c.k.map(kf => {
+                      if (typeof kf === 'object' && kf.s !== undefined) {
+                        return { ...kf, s: rgb, e: rgb };
+                      } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                        return rgb;
+                      }
+                      return kf;
+                    });
+                    console.log("✓ Applied fill color (animated):", customShape.fill, "-> RGB:", rgb);
+                  } else {
+                    // Fallback: just set the array
+                    shape.c.k = rgb;
+                    console.log("✓ Applied fill color (fallback):", customShape.fill, "-> RGB:", rgb);
+                  }
+                } else {
+                  // Fallback: set directly
+                  shape.c.k = rgb;
+                  console.log("✓ Applied fill color (direct):", customShape.fill, "-> RGB:", rgb);
+                }
+              } else {
+                // Create color property if it doesn't exist
+                shape.c.k = rgb;
+                console.log("✓ Created fill color:", customShape.fill, "-> RGB:", rgb);
+              }
+            } else {
+              // Create color object if it doesn't exist
+              shape.c = { a: 0, k: rgb };
+              console.log("✓ Created fill color object:", customShape.fill, "-> RGB:", rgb);
+            }
+          } else if (isStroke1) {
+            strokeFound = true;
+            console.log("Found stroke element (st) -", itemName || "unnamed");
+            const rgba = hexToRgba(customShape.stroke);
+            const rgb = [rgba[0], rgba[1], rgba[2]]; // RGB only
+            
+            if (shape.c) {
+              // Handle both static and animated colors
+              if (shape.c.k !== undefined && shape.c.k !== null) {
+                if (Array.isArray(shape.c.k) && (shape.c.k.length === 3 || shape.c.k.length === 4) && typeof shape.c.k[0] === 'number') {
+                  // Static RGB/RGBA array
+                  shape.c.k = rgb;
+                  console.log("✓ Applied stroke color (static):", customShape.stroke, "-> RGB:", rgb);
+                } else if (Array.isArray(shape.c.k) && shape.c.k.length > 0) {
+                  // Check if animated (keyframes)
+                  const firstItem = shape.c.k[0];
+                  if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                    // Animated with keyframes
+                    shape.c.k = shape.c.k.map(kf => {
+                      if (typeof kf === 'object' && kf.s !== undefined) {
+                        return { ...kf, s: rgb, e: rgb };
+                      } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                        return rgb;
+                      }
+                      return kf;
+                    });
+                    console.log("✓ Applied stroke color (animated):", customShape.stroke, "-> RGB:", rgb);
+                  } else {
+                    // Fallback: just set the array
+                    shape.c.k = rgb;
+                    console.log("✓ Applied stroke color (fallback):", customShape.stroke, "-> RGB:", rgb);
+                  }
+                } else {
+                  // Fallback: set directly
+                  shape.c.k = rgb;
+                  console.log("✓ Applied stroke color (direct):", customShape.stroke, "-> RGB:", rgb);
+                }
+              } else {
+                // Create color property if it doesn't exist
+                shape.c.k = rgb;
+                console.log("✓ Created stroke color:", customShape.stroke, "-> RGB:", rgb);
+              }
+            } else {
+              // Create color object if it doesn't exist
+              shape.c = { a: 0, k: rgb };
+              console.log("✓ Created stroke color object:", customShape.stroke, "-> RGB:", rgb);
+            }
+          }
+        }
+      } else {
+        // Fallback: check if shapes are in groups
+        for (const shape of layer.shapes) {
+          if (shape.ty !== "gr") {
+            console.log("Skipping non-group shape:", shape.ty);
+            continue; // Not a group
+          }
+          
+          // Look for path elements in the group
+          if (!shape.it || !Array.isArray(shape.it)) {
+            console.log("Shape group has no items array");
+            continue;
+          }
+          
+          console.log("Found shape group:", shape.nm || "unnamed", "items:", shape.it.length);
+          
+          for (const it of shape.it) {
+            if (!it || !it.ty) continue;
+            
+            // Look for "Path 1", "Fill 1", "Stroke 1" by name or type
+            const itemName = it.nm || "";
+            const isPath1 = it.ty === "sh" && (itemName === "Path 1" || itemName.includes("Path") || !itemName);
+            const isFill1 = it.ty === "fl" && (itemName === "Fill 1" || itemName.includes("Fill") || !itemName);
+            const isStroke1 = it.ty === "st" && (itemName === "Stroke 1" || itemName.includes("Stroke") || !itemName);
+          
+          if (isPath1) { // Shape/path element (Path 1)
             pathFound = true;
             // Store original path for reference (to get position/scale)
             const originalPath = it.ks;
-            console.log("Found path element (sh), original path:", originalPath ? "exists" : "missing");
+            console.log("Found path element (sh) -", itemName || "unnamed", "original path:", originalPath ? "exists" : "missing");
             if (originalPath && originalPath.k && originalPath.k.v) {
               console.log("Original path has", originalPath.k.v.length, "vertices");
               if (originalPath.k.v.length > 0) {
@@ -1292,26 +1439,103 @@
             } else {
               console.error("✗ Failed to convert path to Lottie format");
             }
-          } else if (it.ty === "fl") { // Fill element
+          } else if (isFill1) { // Fill element (Fill 1)
             fillFound = true;
+            console.log("Found fill element (fl) -", itemName || "unnamed");
             const rgba = hexToRgba(customShape.fill);
-            if (it.c && it.c.k !== undefined) {
-              it.c.k = [rgba[0], rgba[1], rgba[2]]; // RGB only
-              console.log("✓ Applied fill color:", customShape.fill, "-> RGB:", [rgba[0], rgba[1], rgba[2]]);
+            const rgb = [rgba[0], rgba[1], rgba[2]]; // RGB only
+            
+            if (it.c) {
+              // Handle both static and animated colors
+              if (it.c.k !== undefined && it.c.k !== null) {
+                if (Array.isArray(it.c.k) && (it.c.k.length === 3 || it.c.k.length === 4) && typeof it.c.k[0] === 'number') {
+                  // Static RGB/RGBA array
+                  it.c.k = rgb;
+                  console.log("✓ Applied fill color (static):", customShape.fill, "-> RGB:", rgb);
+                } else if (Array.isArray(it.c.k) && it.c.k.length > 0) {
+                  // Check if animated (keyframes)
+                  const firstItem = it.c.k[0];
+                  if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                    // Animated with keyframes
+                    it.c.k = it.c.k.map(kf => {
+                      if (typeof kf === 'object' && kf.s !== undefined) {
+                        return { ...kf, s: rgb, e: rgb };
+                      } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                        return rgb;
+                      }
+                      return kf;
+                    });
+                    console.log("✓ Applied fill color (animated):", customShape.fill, "-> RGB:", rgb);
+                  } else {
+                    // Fallback: just set the array
+                    it.c.k = rgb;
+                    console.log("✓ Applied fill color (fallback):", customShape.fill, "-> RGB:", rgb);
+                  }
+                } else {
+                  // Fallback: set directly
+                  it.c.k = rgb;
+                  console.log("✓ Applied fill color (direct):", customShape.fill, "-> RGB:", rgb);
+                }
+              } else {
+                // Create color property if it doesn't exist
+                it.c.k = rgb;
+                console.log("✓ Created fill color:", customShape.fill, "-> RGB:", rgb);
+              }
             } else {
-              console.warn("Fill element has no color property");
+              // Create color object if it doesn't exist
+              it.c = { a: 0, k: rgb };
+              console.log("✓ Created fill color object:", customShape.fill, "-> RGB:", rgb);
             }
-          } else if (it.ty === "st") { // Stroke element
+          } else if (isStroke1) { // Stroke element (Stroke 1)
             strokeFound = true;
+            console.log("Found stroke element (st) -", itemName || "unnamed");
             const rgba = hexToRgba(customShape.stroke);
-            if (it.c && it.c.k !== undefined) {
-              it.c.k = [rgba[0], rgba[1], rgba[2]]; // RGB only
-              console.log("✓ Applied stroke color:", customShape.stroke, "-> RGB:", [rgba[0], rgba[1], rgba[2]]);
+            const rgb = [rgba[0], rgba[1], rgba[2]]; // RGB only
+            
+            if (it.c) {
+              // Handle both static and animated colors
+              if (it.c.k !== undefined && it.c.k !== null) {
+                if (Array.isArray(it.c.k) && (it.c.k.length === 3 || it.c.k.length === 4) && typeof it.c.k[0] === 'number') {
+                  // Static RGB/RGBA array
+                  it.c.k = rgb;
+                  console.log("✓ Applied stroke color (static):", customShape.stroke, "-> RGB:", rgb);
+                } else if (Array.isArray(it.c.k) && it.c.k.length > 0) {
+                  // Check if animated (keyframes)
+                  const firstItem = it.c.k[0];
+                  if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                    // Animated with keyframes
+                    it.c.k = it.c.k.map(kf => {
+                      if (typeof kf === 'object' && kf.s !== undefined) {
+                        return { ...kf, s: rgb, e: rgb };
+                      } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                        return rgb;
+                      }
+                      return kf;
+                    });
+                    console.log("✓ Applied stroke color (animated):", customShape.stroke, "-> RGB:", rgb);
+                  } else {
+                    // Fallback: just set the array
+                    it.c.k = rgb;
+                    console.log("✓ Applied stroke color (fallback):", customShape.stroke, "-> RGB:", rgb);
+                  }
+                } else {
+                  // Fallback: set directly
+                  it.c.k = rgb;
+                  console.log("✓ Applied stroke color (direct):", customShape.stroke, "-> RGB:", rgb);
+                }
+              } else {
+                // Create color property if it doesn't exist
+                it.c.k = rgb;
+                console.log("✓ Created stroke color:", customShape.stroke, "-> RGB:", rgb);
+              }
             } else {
-              console.warn("Stroke element has no color property");
+              // Create color object if it doesn't exist
+              it.c = { a: 0, k: rgb };
+              console.log("✓ Created stroke color object:", customShape.stroke, "-> RGB:", rgb);
             }
           }
         }
+      }
       }
       
       if (!pathFound) {
@@ -1704,6 +1928,20 @@
       // Apply colors
       for (const layer of animData.layers || []) {
         const layerName = layer.nm;
+        
+        // Skip layers that have custom shapes (they'll be handled separately with custom colors)
+        // Only skip the original Heart layer, not CustomHeart (CustomHeart needs its colors applied)
+        const hasCustomShape = state.customShapes && Object.keys(state.customShapes).some(accName => {
+          const layerNames = ACCESSORY_LAYERS[accName] || [];
+          // Only skip if this is the original layer (not CustomHeart) and has a custom shape
+          return layerNames.includes(layerName) && layerName !== "CustomHeart" && state.customShapes[accName];
+        });
+        
+        if (hasCustomShape) {
+          console.log(`Skipping default color application for ${layerName} (has custom shape with custom colors)`);
+          continue;
+        }
+        
         if (!RIGLET_GROUPS[layerName]) continue;
         
         const limbDef = RIGLET_GROUPS[layerName];
@@ -1880,18 +2118,53 @@
       }
       
       // Apply accessories visibility and custom shapes
+      // IMPORTANT: This must run AFTER applyColorsToAnimation to ensure custom colors aren't overwritten
+      console.log("Checking for custom shapes. state.customShapes:", state.customShapes);
+      console.log("Available layers:", animData.layers?.map(l => l.nm) || []);
       for (const layer of animData.layers || []) {
         const layerName = layer.nm;
         for (const [accName, layerNames] of Object.entries(ACCESSORY_LAYERS)) {
           if (layerNames.includes(layerName)) {
+            console.log(`Layer ${layerName} matches accessory ${accName} (layers: ${layerNames.join(", ")})`);
             const isEnabled = state.accessories[accName];
-            layer.hd = !isEnabled;
             
-            // If this is a custom drawn shape, replace the path
-            // Only apply if the accessory is enabled
-            if (isEnabled && state.customShapes && state.customShapes[accName] && layerName === accName) {
-              console.log("Applying custom shape to", layerName, "custom shape:", state.customShapes[accName]);
-              applyCustomShapeToLayer(layer, state.customShapes[accName]);
+            // For Heart accessory: if custom shape exists, show CustomHeart and hide Heart
+            // Otherwise, show Heart and hide CustomHeart
+            if (accName === "Heart") {
+              if (isEnabled && state.customShapes && state.customShapes[accName]) {
+                // Custom shape exists - show CustomHeart, hide Heart
+                if (layerName === "CustomHeart") {
+                  layer.hd = false; // Show CustomHeart
+                  console.log("✓ Showing CustomHeart layer (custom shape exists)");
+                } else if (layerName === "Heart") {
+                  layer.hd = true; // Hide original Heart
+                  console.log("✓ Hiding Heart layer (custom shape exists)");
+                }
+              } else {
+                // No custom shape - show Heart, hide CustomHeart
+                if (layerName === "Heart") {
+                  layer.hd = !isEnabled; // Show/hide based on toggle
+                } else if (layerName === "CustomHeart") {
+                  layer.hd = true; // Always hide CustomHeart when no custom shape
+                }
+              }
+            } else {
+              // For other accessories, just toggle visibility
+              layer.hd = !isEnabled;
+            }
+            
+            // If this is CustomHeart and has a custom drawn shape, apply it
+            if (layerName === "CustomHeart") {
+              console.log("Found CustomHeart layer. Checking conditions:", {
+                isEnabled,
+                hasCustomShapes: !!state.customShapes,
+                hasHeartCustomShape: !!(state.customShapes && state.customShapes[accName]),
+                accName: accName
+              });
+              if (isEnabled && state.customShapes && state.customShapes[accName]) {
+                console.log("✓ Applying custom shape to CustomHeart layer:", state.customShapes[accName]);
+                applyCustomShapeToLayer(layer, state.customShapes[accName]);
+              }
             }
           }
         }
