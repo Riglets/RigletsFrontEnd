@@ -149,24 +149,6 @@
       text-align: center;
     }
     
-    .preset-colors {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-top: 8px;
-    }
-    
-    .preset-btn {
-      aspect-ratio: 1;
-      border: 2px solid var(--tg-theme-hint-color, #444);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: transform 0.1s;
-    }
-    
-    .preset-btn:active {
-      transform: scale(0.95);
-    }
     
     .toggle-group {
       display: flex;
@@ -329,10 +311,9 @@
           <div class="color-input-wrapper">
             <input type="color" id="globalStitch" value="#000000" />
             <input type="text" class="color-hex" id="globalStitchHex" value="#000000" maxlength="7" />
-          </div>
         </div>
-        <div class="preset-colors" id="presetColors"></div>
       </div>
+    </div>
     </div>
     
     <!-- Advanced Mode -->
@@ -446,16 +427,6 @@
       animation: "Default"
     };
 
-    // Preset colors
-    const presets = [
-      { name: "Peach", hex: "#F1C799" },
-      { name: "Tan", hex: "#C88C55" },
-      { name: "Pink", hex: "#F49BC1" },
-      { name: "Blue", hex: "#8FC7FF" },
-      { name: "Mint", hex: "#A0FFD1" },
-      { name: "White", hex: "#FFFFFF" },
-      { name: "Black", hex: "#000000" }
-    ];
 
     const limbs = ["Head", "Body", "Left_Arm", "Right_Arm", "Left_Leg", "Right_Leg"];
     const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds", "TGpatch"];
@@ -523,7 +494,6 @@
       console.log("=== INIT STARTING ===");
       console.log("Setting up UI components...");
       
-      setupPresets();
       setupLimbSelector();
       setupAccessories();
       setupColorInputs();
@@ -551,23 +521,6 @@
       console.log("=== INIT COMPLETE ===");
     }
 
-    function setupPresets() {
-      const container = document.getElementById("presetColors");
-      presets.forEach(preset => {
-        const btn = document.createElement("button");
-        btn.className = "preset-btn";
-        btn.style.backgroundColor = preset.hex;
-        btn.title = preset.name;
-        btn.addEventListener("click", () => {
-          if (isAdvancedMode && currentLimb) {
-            applyColorToLimb(currentLimb, "fill", preset.hex);
-          } else {
-            applyGlobalColor("fill", preset.hex);
-          }
-        });
-        container.appendChild(btn);
-      });
-    }
 
     function setupLimbSelector() {
       const container = document.getElementById("limbSelector");
