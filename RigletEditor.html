@@ -5,7 +5,9 @@
   <title>Riglet Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js" 
+          onload="console.log('Lottie script loaded successfully');" 
+          onerror="console.error('Failed to load Lottie script');"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -64,6 +66,14 @@
       height: 100%;
       max-width: 300px;
       max-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    #lottieContainer svg {
+      max-width: 100%;
+      max-height: 100%;
     }
     
     .tools-container {
@@ -365,9 +375,26 @@
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    // Immediate test to see if script is running
+    try {
+      console.log("=== RIGLET EDITOR SCRIPT STARTING ===");
+      console.log("Window loaded:", typeof window !== 'undefined');
+      console.log("Document ready state:", document.readyState);
+      
+      const tg = window.Telegram.WebApp;
+      console.log("Telegram WebApp object:", typeof tg !== 'undefined' ? 'available' : 'missing');
+      
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        console.log("Telegram WebApp initialized");
+      } else {
+        console.error("Telegram WebApp not available!");
+      }
+    } catch (e) {
+      console.error("Error in initial script:", e);
+      document.getElementById("previewPlaceholder").textContent = "Script error: " + e.message;
+    }
 
     // Default state
     const state = {
@@ -458,6 +485,9 @@
 
     // Initialize UI
     async function init() {
+      console.log("=== INIT STARTING ===");
+      console.log("Setting up UI components...");
+      
       setupPresets();
       setupLimbSelector();
       setupAccessories();
@@ -465,18 +495,25 @@
       setupToggles();
       setupButtons();
       
+      console.log("UI components set up");
+      
       // Try to load initial state from initData if available
       if (tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
         try {
+          console.log("Loading saved state from initData...");
           const savedState = JSON.parse(decodeURIComponent(tg.initDataUnsafe.start_param));
           loadState(savedState);
         } catch (e) {
-          console.log("No saved state found");
+          console.log("No saved state found or error parsing:", e);
         }
+      } else {
+        console.log("No initData.start_param available");
       }
       
       // Load and render the animation
+      console.log("Starting animation load...");
       await loadAndRenderAnimation();
+      console.log("=== INIT COMPLETE ===");
     }
 
     function setupPresets() {
@@ -492,7 +529,6 @@
           } else {
             applyGlobalColor("fill", preset.hex);
           }
-          // Preview update is handled by applyColorToLimb/applyGlobalColor
         });
         container.appendChild(btn);
       });
@@ -706,19 +742,53 @@
 
     async function loadAndRenderAnimation() {
       try {
+        // Check if lottie is loaded
+        if (typeof lottie === 'undefined') {
+          throw new Error("Lottie library not loaded");
+        }
+        
         const animationFile = state.animation === "Wave" ? "RigletBase.json" : "RigletTurn.json";
         const url = `https://riglets.github.io/RigletsFrontEnd/${animationFile}`;
         
+        console.log("Loading animation from:", url);
+        document.getElementById("previewPlaceholder").textContent = "Loading animation...";
+        
         const response = await fetch(url);
+        console.log("Response status:", response.status, response.statusText);
+        
         if (!response.ok) {
-          throw new Error(`Failed to load animation: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        baseAnimationData = await response.json();
+        const contentType = response.headers.get("content-type");
+        console.log("Content-Type:", contentType);
+        
+        if (!contentType || !contentType.includes("application/json")) {
+          console.warn("Warning: Content-Type is not JSON:", contentType);
+        }
+        
+        const jsonData = await response.json();
+        console.log("Animation loaded successfully, layers:", jsonData.layers?.length || 0);
+        
+        baseAnimationData = jsonData;
         updatePreview();
       } catch (error) {
         console.error("Error loading animation:", error);
-        document.getElementById("previewPlaceholder").textContent = "Failed to load preview";
+        const errorMsg = error.message || "Unknown error";
+        document.getElementById("previewPlaceholder").textContent = 
+          `Failed to load preview: ${errorMsg}. Check console for details.`;
+        
+        // Show more helpful error message
+        if (errorMsg.includes("404") || errorMsg.includes("Not Found")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "File not found. Make sure RigletTurn.json and RigletBase.json are in your GitHub Pages repo and accessible at: https://riglets.github.io/RigletsFrontEnd/";
+        } else if (errorMsg.includes("CORS") || errorMsg.includes("Failed to fetch")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "Network error. Check if GitHub Pages is enabled and files are accessible.";
+        } else if (errorMsg.includes("JSON")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "Invalid JSON file. Make sure the JSON files are valid.";
+        }
       }
     }
 
@@ -814,7 +884,19 @@
     }
 
     function updatePreview() {
-      if (!baseAnimationData) return;
+      if (!baseAnimationData) {
+        console.log("No animation data available yet");
+        return;
+      }
+      
+      // Check if lottie is loaded
+      if (typeof lottie === 'undefined') {
+        console.error("Lottie library not available");
+        document.getElementById("previewPlaceholder").textContent = "Lottie library not loaded";
+        document.getElementById("previewPlaceholder").classList.remove("hidden");
+        document.getElementById("lottieContainer").classList.add("hidden");
+        return;
+      }
       
       // Debounce updates for performance
       if (updateTimeout) {
@@ -823,31 +905,67 @@
       
       updateTimeout = setTimeout(() => {
         try {
+          console.log("Applying colors to animation...");
           const coloredData = applyColorsToAnimation(
             baseAnimationData,
             state.colors,
             state.stitch_hashed
           );
           
-          // Hide placeholder, show container
-          document.getElementById("previewPlaceholder").classList.add("hidden");
-          document.getElementById("lottieContainer").classList.remove("hidden");
+          console.log("Animation data processed, layers:", coloredData.layers?.length);
+          
+          // Clear the container first
+          const container = document.getElementById("lottieContainer");
+          container.innerHTML = '';
           
           // Destroy existing instance
           if (lottieInstance) {
-            lottieInstance.destroy();
+            try {
+              lottieInstance.destroy();
+            } catch (e) {
+              console.warn("Error destroying previous instance:", e);
+            }
+            lottieInstance = null;
           }
           
+          // Hide placeholder, show container
+          document.getElementById("previewPlaceholder").classList.add("hidden");
+          container.classList.remove("hidden");
+          
           // Create new instance with updated data
+          console.log("Rendering animation with Lottie...");
           lottieInstance = lottie.loadAnimation({
-            container: document.getElementById("lottieContainer"),
+            container: container,
             renderer: "svg",
             loop: true,
             autoplay: true,
             animationData: coloredData
           });
+          
+          // Add event listeners to check if animation loaded
+          lottieInstance.addEventListener('data_ready', () => {
+            console.log("Lottie animation data ready");
+          });
+          
+          lottieInstance.addEventListener('DOMLoaded', () => {
+            console.log("Lottie animation DOM loaded");
+          });
+          
+          lottieInstance.addEventListener('error', (error) => {
+            console.error("Lottie animation error:", error);
+            document.getElementById("previewPlaceholder").classList.remove("hidden");
+            container.classList.add("hidden");
+            document.getElementById("previewPlaceholder").textContent = 
+              `Animation error: ${error.message || "Unknown error"}`;
+          });
+          
+          console.log("Animation instance created");
         } catch (error) {
           console.error("Error updating preview:", error);
+          document.getElementById("previewPlaceholder").classList.remove("hidden");
+          document.getElementById("lottieContainer").classList.add("hidden");
+          document.getElementById("previewPlaceholder").textContent = 
+            `Error rendering preview: ${error.message}`;
         }
       }, 100); // 100ms debounce for smooth updates
     }
@@ -869,8 +987,58 @@
       }
     }
 
-    // Initialize on load
-    init();
+    // Wait for DOM and scripts to load
+    function startApp() {
+      console.log("Starting app initialization...");
+      console.log("Lottie available:", typeof lottie !== 'undefined');
+      console.log("Telegram WebApp available:", typeof tg !== 'undefined');
+      
+      if (typeof lottie === 'undefined') {
+        console.warn("Lottie not loaded yet, waiting...");
+        document.getElementById("previewPlaceholder").textContent = "Loading Lottie library...";
+        
+        // Check every 100ms for lottie
+        const checkLottie = setInterval(() => {
+          if (typeof lottie !== 'undefined') {
+            clearInterval(checkLottie);
+            console.log("Lottie loaded, initializing app...");
+            init();
+          }
+        }, 100);
+        
+        // Give up after 5 seconds
+        setTimeout(() => {
+          if (typeof lottie === 'undefined') {
+            clearInterval(checkLottie);
+            console.error("Lottie library failed to load after 5 seconds");
+            document.getElementById("previewPlaceholder").textContent = 
+              "Failed to load Lottie library. Please check your internet connection.";
+          }
+        }, 5000);
+      } else {
+        console.log("Lottie already loaded, initializing immediately...");
+        init();
+      }
+    }
+    
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startApp);
+    } else {
+      // DOM already loaded
+      startApp();
+    }
+    
+    // Also try on window load as backup
+    window.addEventListener('load', () => {
+      if (!baseAnimationData && typeof lottie !== 'undefined') {
+        console.log("Window loaded, checking if we need to initialize...");
+        if (typeof baseAnimationData === 'undefined' || baseAnimationData === null) {
+          console.log("Initializing from window load event...");
+          init();
+        }
+      }
+    });
   </script>
 </body>
 </html>
