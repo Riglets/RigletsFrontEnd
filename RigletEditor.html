@@ -5,7 +5,9 @@
   <title>Riglet Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js" 
+          onload="console.log('Lottie script loaded successfully');" 
+          onerror="console.error('Failed to load Lottie script');"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -64,6 +66,19 @@
       height: 100%;
       max-width: 300px;
       max-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    
+    #lottieContainer svg {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 300px !important;
+      max-height: 300px !important;
+      display: block !important;
+      visibility: visible !important;
     }
     
     .tools-container {
@@ -365,9 +380,34 @@
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    // Define tg in global scope so all functions can access it
+    let tg = null;
+    
+    // Initialize Telegram WebApp immediately
+    try {
+      console.log("=== RIGLET EDITOR SCRIPT STARTING ===");
+      console.log("Window loaded:", typeof window !== 'undefined');
+      console.log("Document ready state:", document.readyState);
+      
+      if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
+        console.log("Telegram WebApp object: available");
+        
+        if (tg) {
+          tg.ready();
+          tg.expand();
+          console.log("Telegram WebApp initialized");
+        }
+      } else {
+        console.log("Telegram WebApp not available (running outside Telegram)");
+      }
+    } catch (e) {
+      console.error("Error in initial script:", e);
+      const placeholder = document.getElementById("previewPlaceholder");
+      if (placeholder) {
+        placeholder.textContent = "Script error: " + e.message;
+      }
+    }
 
     // Default state
     const state = {
@@ -455,9 +495,20 @@
     let baseAnimationData = null;
     let lottieInstance = null;
     let updateTimeout = null;
+    let isInitialized = false; // Prevent duplicate initialization
 
     // Initialize UI
     async function init() {
+      // Prevent duplicate initialization
+      if (isInitialized) {
+        console.log("Already initialized, skipping...");
+        return;
+      }
+      isInitialized = true;
+      
+      console.log("=== INIT STARTING ===");
+      console.log("Setting up UI components...");
+      
       setupPresets();
       setupLimbSelector();
       setupAccessories();
@@ -465,18 +516,25 @@
       setupToggles();
       setupButtons();
       
+      console.log("UI components set up");
+      
       // Try to load initial state from initData if available
-      if (tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
         try {
+          console.log("Loading saved state from initData...");
           const savedState = JSON.parse(decodeURIComponent(tg.initDataUnsafe.start_param));
           loadState(savedState);
         } catch (e) {
-          console.log("No saved state found");
+          console.log("No saved state found or error parsing:", e);
         }
+      } else {
+        console.log("No initData.start_param available");
       }
       
       // Load and render the animation
+      console.log("Starting animation load...");
       await loadAndRenderAnimation();
+      console.log("=== INIT COMPLETE ===");
     }
 
     function setupPresets() {
@@ -492,7 +550,6 @@
           } else {
             applyGlobalColor("fill", preset.hex);
           }
-          // Preview update is handled by applyColorToLimb/applyGlobalColor
         });
         container.appendChild(btn);
       });
@@ -706,19 +763,53 @@
 
     async function loadAndRenderAnimation() {
       try {
+        // Check if lottie is loaded
+        if (typeof lottie === 'undefined') {
+          throw new Error("Lottie library not loaded");
+        }
+        
         const animationFile = state.animation === "Wave" ? "RigletBase.json" : "RigletTurn.json";
         const url = `https://riglets.github.io/RigletsFrontEnd/${animationFile}`;
         
+        console.log("Loading animation from:", url);
+        document.getElementById("previewPlaceholder").textContent = "Loading animation...";
+        
         const response = await fetch(url);
+        console.log("Response status:", response.status, response.statusText);
+        
         if (!response.ok) {
-          throw new Error(`Failed to load animation: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        baseAnimationData = await response.json();
+        const contentType = response.headers.get("content-type");
+        console.log("Content-Type:", contentType);
+        
+        if (!contentType || !contentType.includes("application/json")) {
+          console.warn("Warning: Content-Type is not JSON:", contentType);
+        }
+        
+        const jsonData = await response.json();
+        console.log("Animation loaded successfully, layers:", jsonData.layers?.length || 0);
+        
+        baseAnimationData = jsonData;
         updatePreview();
       } catch (error) {
         console.error("Error loading animation:", error);
-        document.getElementById("previewPlaceholder").textContent = "Failed to load preview";
+        const errorMsg = error.message || "Unknown error";
+        document.getElementById("previewPlaceholder").textContent = 
+          `Failed to load preview: ${errorMsg}. Check console for details.`;
+        
+        // Show more helpful error message
+        if (errorMsg.includes("404") || errorMsg.includes("Not Found")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "File not found. Make sure RigletTurn.json and RigletBase.json are in your GitHub Pages repo and accessible at: https://riglets.github.io/RigletsFrontEnd/";
+        } else if (errorMsg.includes("CORS") || errorMsg.includes("Failed to fetch")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "Network error. Check if GitHub Pages is enabled and files are accessible.";
+        } else if (errorMsg.includes("JSON")) {
+          document.getElementById("previewPlaceholder").textContent = 
+            "Invalid JSON file. Make sure the JSON files are valid.";
+        }
       }
     }
 
@@ -735,51 +826,164 @@
         const colorDef = colors[layerName] || {};
         
         for (const shape of layer.shapes || []) {
-          if (shape.ty !== "gr") continue;
+          if (!shape || shape.ty !== "gr") continue;
           
           const groupName = shape.nm;
           const targets = [];
           
           if (limbDef.fill && limbDef.fill.includes(groupName)) {
             const fillColor = colorDef.fill;
-            if (fillColor) targets.push({ kind: "fill", color: fillColor });
+            if (fillColor) {
+              targets.push({ kind: "fill", color: fillColor });
+              console.log(`Found fill target: ${layerName}/${groupName} -> ${fillColor}`);
+            }
           }
           
           if (limbDef.stroke && limbDef.stroke.includes(groupName)) {
             const strokeColor = colorDef.stroke;
-            if (strokeColor) targets.push({ kind: "stroke", color: strokeColor });
+            if (strokeColor) {
+              targets.push({ kind: "stroke", color: strokeColor });
+              console.log(`Found stroke target: ${layerName}/${groupName} -> ${strokeColor}`);
+            }
           }
           
           if (limbDef.stitch && limbDef.stitch.includes(groupName)) {
             const stitchColor = colorDef.stitch;
-            if (stitchColor) targets.push({ kind: "stitch", color: stitchColor });
+            if (stitchColor) {
+              targets.push({ kind: "stitch", color: stitchColor });
+              console.log(`Found stitch target: ${layerName}/${groupName} -> ${stitchColor}`);
+            }
           }
+          
+          if (targets.length === 0) continue; // Skip if no targets found
+          
+          console.log(`Processing ${targets.length} targets for ${layerName}/${groupName}`);
           
           for (const target of targets) {
             const rgba = hexToRgba(target.color);
+            console.log(`  Target: ${target.kind}, color: ${target.color}, rgba:`, rgba);
             
-            for (const it of shape.it || []) {
+            if (!shape.it || !Array.isArray(shape.it)) {
+              console.log(`  No shape.it array found for ${layerName}/${groupName}`);
+              continue;
+            }
+            
+            console.log(`  Shape has ${shape.it.length} items`);
+            
+            for (const it of shape.it) {
+              if (!it || !it.ty) continue;
               const ty = it.ty;
               
               if (ty === "fl" && target.kind === "fill") {
-                if (it.c && it.c.k) {
-                  it.c.k = rgba;
+                console.log(`  Found fill element (fl) in ${layerName}/${groupName}`);
+                if (it.c && it.c.k !== undefined && it.c.k !== null) {
+                  console.log(`  Fill color structure:`, Array.isArray(it.c.k) ? `array[${it.c.k.length}]` : typeof it.c.k, it.c.k);
+                  
+                  // Extract RGB (first 3 values) from RGBA
+                  const rgb = [rgba[0], rgba[1], rgba[2]];
+                  
+                  // Check if it's a static color array (RGB or RGBA)
+                  if (Array.isArray(it.c.k) && (it.c.k.length === 3 || it.c.k.length === 4) && typeof it.c.k[0] === 'number') {
+                    // Static RGB/RGBA array - replace with RGB (Lottie uses RGB for fills)
+                    console.log(`  ✓ Applying fill color (RGB) to ${layerName}/${groupName}:`, rgb);
+                    it.c.k = rgb;
+                  } else if (Array.isArray(it.c.k) && it.c.k.length > 0) {
+                    // Check if it's animated (keyframes)
+                    const firstItem = it.c.k[0];
+                    console.log(`  Fill is animated, first item:`, typeof firstItem, firstItem);
+                    if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                      // Animated with keyframes - modify the start/end values
+                      console.log(`  ✓ Applying animated fill color (keyframes) to ${layerName}/${groupName}`);
+                      it.c.k = it.c.k.map(kf => {
+                        if (typeof kf === 'object' && kf.s !== undefined) {
+                          // Keyframe with start/end values
+                          const startRGB = Array.isArray(kf.s) && kf.s.length >= 3 ? kf.s.slice(0, 3) : rgb;
+                          const endRGB = Array.isArray(kf.e) && kf.e.length >= 3 ? kf.e.slice(0, 3) : rgb;
+                          return { ...kf, s: [rgb], e: [rgb] };
+                        } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                          return rgb;
+                        }
+                        return kf;
+                      });
+                    } else if (typeof firstItem === 'number') {
+                      // Array of numbers (RGB values) - this is the animated RGB array
+                      console.log(`  ✓ Applying fill color (animated RGB array) to ${layerName}/${groupName}`);
+                      it.c.k = rgb;
+                    } else {
+                      console.warn(`  ⚠ Unknown fill color structure for ${layerName}/${groupName}`);
+                    }
+                  } else {
+                    console.warn(`  ⚠ Fill color structure not recognized:`, typeof it.c.k, it.c.k);
+                  }
+                } else {
+                  console.warn(`  ⚠ No fill color property (it.c) found for ${layerName}/${groupName}`);
                 }
               }
               
               if (ty === "st" && (target.kind === "stroke" || target.kind === "stitch")) {
-                if (it.c && it.c.k) {
-                  it.c.k = rgba;
+                console.log(`  Found stroke element (st) in ${layerName}/${groupName}, kind: ${target.kind}`);
+                if (it.c && it.c.k !== undefined && it.c.k !== null) {
+                  console.log(`  Stroke color structure:`, Array.isArray(it.c.k) ? `array[${it.c.k.length}]` : typeof it.c.k, it.c.k);
+                  
+                  // Extract RGB (first 3 values) from RGBA
+                  const rgb = [rgba[0], rgba[1], rgba[2]];
+                  
+                  // Check if it's a static color array (RGB or RGBA)
+                  if (Array.isArray(it.c.k) && (it.c.k.length === 3 || it.c.k.length === 4) && typeof it.c.k[0] === 'number') {
+                    // Static RGB/RGBA array - replace with RGB (Lottie uses RGB for strokes)
+                    console.log(`  ✓ Applying ${target.kind} color (RGB) to ${layerName}/${groupName}:`, rgb);
+                    it.c.k = rgb;
+                  } else if (Array.isArray(it.c.k) && it.c.k.length > 0) {
+                    // Check if it's animated (keyframes)
+                    const firstItem = it.c.k[0];
+                    console.log(`  Stroke is animated, first item:`, typeof firstItem, firstItem);
+                    if (typeof firstItem === 'object' && firstItem.s !== undefined) {
+                      // Animated with keyframes - modify the start/end values
+                      console.log(`  ✓ Applying animated ${target.kind} color (keyframes) to ${layerName}/${groupName}`);
+                      it.c.k = it.c.k.map(kf => {
+                        if (typeof kf === 'object' && kf.s !== undefined) {
+                          // Keyframe with start/end values
+                          const startRGB = Array.isArray(kf.s) && kf.s.length >= 3 ? kf.s.slice(0, 3) : rgb;
+                          const endRGB = Array.isArray(kf.e) && kf.e.length >= 3 ? kf.e.slice(0, 3) : rgb;
+                          return { ...kf, s: [rgb], e: [rgb] };
+                        } else if (Array.isArray(kf) && (kf.length === 3 || kf.length === 4)) {
+                          return rgb;
+                        }
+                        return kf;
+                      });
+                    } else if (typeof firstItem === 'number') {
+                      // Array of numbers (RGB values) - this is the animated RGB array
+                      console.log(`  ✓ Applying ${target.kind} color (animated RGB array) to ${layerName}/${groupName}`);
+                      it.c.k = rgb;
+                    } else {
+                      console.warn(`  ⚠ Unknown stroke color structure for ${layerName}/${groupName}`);
+                    }
+                  } else {
+                    console.warn(`  ⚠ Stroke color structure not recognized:`, typeof it.c.k, it.c.k);
+                  }
+                } else {
+                  console.warn(`  ⚠ No stroke color property (it.c) found for ${layerName}/${groupName}`);
                 }
               
-                if (target.kind === "stitch") {
+                if (target.kind === "stitch" && it.d !== undefined) {
                   if (stitchHashed) {
-                    it.d = [
-                      { n: "d", v: { a: 0, k: STITCH_DASH_LENGTH } },
-                      { n: "o", v: { a: 0, k: 0 } }
-                    ];
+                    // Only modify dash if it exists
+                    if (Array.isArray(it.d)) {
+                      const dashProp = it.d.find(p => p && p.n === "d");
+                      if (dashProp && dashProp.v) {
+                        if (typeof dashProp.v === 'object' && dashProp.v.k !== undefined) {
+                          dashProp.v.k = STITCH_DASH_LENGTH;
+                        }
+                      }
+                    }
                   } else {
-                    if (it.d) delete it.d;
+                    // Remove dash array
+                    if (Array.isArray(it.d)) {
+                      it.d = it.d.filter(p => p && p.n !== "d" && p.n !== "o");
+                      if (it.d.length === 0) {
+                        delete it.d;
+                      }
+                    }
                   }
                 }
               }
@@ -814,7 +1018,19 @@
     }
 
     function updatePreview() {
-      if (!baseAnimationData) return;
+      if (!baseAnimationData) {
+        console.log("No animation data available yet");
+        return;
+      }
+      
+      // Check if lottie is loaded
+      if (typeof lottie === 'undefined') {
+        console.error("Lottie library not available");
+        document.getElementById("previewPlaceholder").textContent = "Lottie library not loaded";
+        document.getElementById("previewPlaceholder").classList.remove("hidden");
+        document.getElementById("lottieContainer").classList.add("hidden");
+        return;
+      }
       
       // Debounce updates for performance
       if (updateTimeout) {
@@ -823,31 +1039,182 @@
       
       updateTimeout = setTimeout(() => {
         try {
+          console.log("Applying colors to animation...");
           const coloredData = applyColorsToAnimation(
             baseAnimationData,
             state.colors,
             state.stitch_hashed
           );
           
-          // Hide placeholder, show container
-          document.getElementById("previewPlaceholder").classList.add("hidden");
-          document.getElementById("lottieContainer").classList.remove("hidden");
+          console.log("Animation data processed, layers:", coloredData.layers?.length);
+          
+          // Clear the container first
+          const container = document.getElementById("lottieContainer");
+          container.innerHTML = '';
           
           // Destroy existing instance
           if (lottieInstance) {
-            lottieInstance.destroy();
+            try {
+              lottieInstance.destroy();
+            } catch (e) {
+              console.warn("Error destroying previous instance:", e);
+            }
+            lottieInstance = null;
           }
           
+          // Destroy existing instance first
+          if (lottieInstance) {
+            try {
+              lottieInstance.destroy();
+            } catch (e) {
+              console.warn("Error destroying previous instance:", e);
+            }
+            lottieInstance = null;
+          }
+          
+          // Clear the container
+          container.innerHTML = '';
+          
+          // Hide placeholder, show container
+          const placeholder = document.getElementById("previewPlaceholder");
+          placeholder.classList.add("hidden");
+          container.classList.remove("hidden");
+          
+          // Ensure container is visible and has size
+          console.log("Container dimensions:", container.offsetWidth, "x", container.offsetHeight);
+          console.log("Container display:", window.getComputedStyle(container).display);
+          console.log("Container visibility:", window.getComputedStyle(container).visibility);
+          
           // Create new instance with updated data
+          console.log("Rendering animation with Lottie...");
+          console.log("Animation data keys:", Object.keys(coloredData));
+          console.log("Animation width:", coloredData.w, "height:", coloredData.h);
+          console.log("Animation frame rate:", coloredData.fr);
+          console.log("Animation total frames:", coloredData.op);
+          
           lottieInstance = lottie.loadAnimation({
-            container: document.getElementById("lottieContainer"),
+            container: container,
             renderer: "svg",
             loop: true,
             autoplay: true,
             animationData: coloredData
           });
+          
+          // Set explicit size based on animation dimensions
+          if (coloredData.w && coloredData.h) {
+            const aspectRatio = coloredData.w / coloredData.h;
+            const maxSize = 300;
+            let width, height;
+            if (aspectRatio > 1) {
+              width = maxSize;
+              height = maxSize / aspectRatio;
+            } else {
+              height = maxSize;
+              width = maxSize * aspectRatio;
+            }
+            container.style.width = width + 'px';
+            container.style.height = height + 'px';
+            console.log("Set container size to:", width, "x", height);
+          }
+          
+          // Ensure animation plays
+          if (lottieInstance) {
+            lottieInstance.play();
+            console.log("Forced animation to play");
+          }
+          
+          // Add event listeners to check if animation loaded
+          lottieInstance.addEventListener('data_ready', () => {
+            console.log("Lottie animation data ready");
+            console.log("Container after data ready:", container.innerHTML.length, "chars");
+          });
+          
+          lottieInstance.addEventListener('DOMLoaded', () => {
+            console.log("Lottie animation DOM loaded");
+            console.log("Container has SVG:", container.querySelector('svg') !== null);
+            const svg = container.querySelector('svg');
+            if (svg) {
+              console.log("SVG dimensions:", svg.offsetWidth, "x", svg.offsetHeight);
+              console.log("SVG viewBox:", svg.getAttribute('viewBox'));
+              console.log("SVG computed style:", window.getComputedStyle(svg).display);
+              console.log("SVG computed visibility:", window.getComputedStyle(svg).visibility);
+              
+              // Force SVG to be visible
+              svg.style.width = '100%';
+              svg.style.height = '100%';
+              svg.style.display = 'block';
+              svg.style.visibility = 'visible';
+            }
+          });
+          
+          let errorLogged = false;
+          lottieInstance.addEventListener('error', (error) => {
+            if (!errorLogged) {
+              errorLogged = true;
+              console.error("Lottie animation error:", error);
+              console.error("Error details:", error.nativeError);
+              placeholder.classList.remove("hidden");
+              container.classList.add("hidden");
+              placeholder.textContent = 
+                `Animation render error. Check console for details.`;
+            }
+          });
+          
+          console.log("Animation instance created");
+          
+          // Check after a short delay if SVG was created and get its properties
+          setTimeout(() => {
+            const svg = container.querySelector('svg');
+            if (svg) {
+              console.log("✓ SVG successfully rendered in container");
+              console.log("SVG actual size:", svg.offsetWidth, "x", svg.offsetHeight);
+              console.log("SVG client size:", svg.clientWidth, "x", svg.clientHeight);
+              console.log("SVG bounding rect:", svg.getBoundingClientRect());
+              console.log("SVG viewBox:", svg.getAttribute('viewBox'));
+              console.log("SVG style:", svg.style.cssText);
+              console.log("SVG computed width:", window.getComputedStyle(svg).width);
+              console.log("SVG computed height:", window.getComputedStyle(svg).height);
+              
+              // Check if animation is playing
+              if (lottieInstance) {
+                console.log("Animation total frames:", lottieInstance.totalFrames);
+                console.log("Animation current frame:", lottieInstance.currentFrame);
+                console.log("Animation is playing:", !lottieInstance.isPaused);
+                
+                // Force play if paused
+                if (lottieInstance.isPaused) {
+                  console.log("Animation was paused, forcing play...");
+                  lottieInstance.play();
+                }
+              }
+              
+              // Try to force visibility
+              svg.style.width = '300px';
+              svg.style.height = '300px';
+              svg.style.display = 'block';
+              svg.style.visibility = 'visible';
+              svg.style.opacity = '1';
+              
+              // Check if SVG has any visible elements
+              const paths = svg.querySelectorAll('path, circle, rect, ellipse, polygon');
+              console.log("SVG has", paths.length, "drawable elements");
+              if (paths.length > 0) {
+                const firstPath = paths[0];
+                console.log("First element fill:", window.getComputedStyle(firstPath).fill);
+                console.log("First element stroke:", window.getComputedStyle(firstPath).stroke);
+                console.log("First element opacity:", window.getComputedStyle(firstPath).opacity);
+              }
+            } else {
+              console.warn("⚠ No SVG found in container after 500ms");
+              console.log("Container HTML:", container.innerHTML.substring(0, 200));
+            }
+          }, 500);
         } catch (error) {
           console.error("Error updating preview:", error);
+          document.getElementById("previewPlaceholder").classList.remove("hidden");
+          document.getElementById("lottieContainer").classList.add("hidden");
+          document.getElementById("previewPlaceholder").textContent = 
+            `Error rendering preview: ${error.message}`;
         }
       }, 100); // 100ms debounce for smooth updates
     }
@@ -862,15 +1229,69 @@
         animation: state.animation
       };
       
-      tg.sendData(JSON.stringify(data));
-      
-      if (action === "done") {
-        tg.close();
+      if (tg) {
+        tg.sendData(JSON.stringify(data));
+        
+        if (action === "done") {
+          tg.close();
+        }
+      } else {
+        console.error("Telegram WebApp not available, cannot send data");
       }
     }
 
-    // Initialize on load
-    init();
+    // Wait for DOM and scripts to load
+    function startApp() {
+      console.log("Starting app initialization...");
+      console.log("Lottie available:", typeof lottie !== 'undefined');
+      console.log("Telegram WebApp available:", tg !== null && tg !== undefined, tg);
+      
+      if (typeof lottie === 'undefined') {
+        console.warn("Lottie not loaded yet, waiting...");
+        document.getElementById("previewPlaceholder").textContent = "Loading Lottie library...";
+        
+        // Check every 100ms for lottie
+        const checkLottie = setInterval(() => {
+          if (typeof lottie !== 'undefined') {
+            clearInterval(checkLottie);
+            console.log("Lottie loaded, initializing app...");
+            init();
+          }
+        }, 100);
+        
+        // Give up after 5 seconds
+        setTimeout(() => {
+          if (typeof lottie === 'undefined') {
+            clearInterval(checkLottie);
+            console.error("Lottie library failed to load after 5 seconds");
+            document.getElementById("previewPlaceholder").textContent = 
+              "Failed to load Lottie library. Please check your internet connection.";
+          }
+        }, 5000);
+      } else {
+        console.log("Lottie already loaded, initializing immediately...");
+        init();
+      }
+    }
+    
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startApp);
+    } else {
+      // DOM already loaded
+      startApp();
+    }
+    
+    // Also try on window load as backup (but only if not already initialized)
+    window.addEventListener('load', () => {
+      if (!isInitialized && typeof lottie !== 'undefined') {
+        console.log("Window loaded, checking if we need to initialize...");
+        if (!baseAnimationData) {
+          console.log("Initializing from window load event...");
+          init();
+        }
+      }
+    });
   </script>
 </body>
 </html>
