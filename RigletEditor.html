@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Riglet Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--tg-theme-bg-color, #111);
+      color: var(--tg-theme-text-color, #fff);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .header {
+      padding: 12px 16px;
+      text-align: center;
+      border-bottom: 1px solid var(--tg-theme-hint-color, #333);
+      background: var(--tg-theme-secondary-bg-color, #1a1a1a);
+    }
+    
+    .header h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .preview-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: var(--tg-theme-bg-color, #111);
+      min-height: 200px;
+      position: relative;
+    }
+    
+    .preview-placeholder {
+      text-align: center;
+      color: var(--tg-theme-hint-color, #888);
+      font-size: 14px;
+    }
+    
+    .preview-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    
+    .tools-container {
+      background: var(--tg-theme-secondary-bg-color, #1a1a1a);
+      border-top: 1px solid var(--tg-theme-hint-color, #333);
+      padding: 16px;
+      overflow-y: auto;
+      max-height: 50vh;
+    }
+    
+    .tool-section {
+      margin-bottom: 20px;
+    }
+    
+    .tool-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--tg-theme-hint-color, #aaa);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .color-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .color-label {
+      min-width: 80px;
+      font-size: 14px;
+    }
+    
+    .color-input-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    input[type="color"] {
+      width: 50px;
+      height: 50px;
+      border: 2px solid var(--tg-theme-hint-color, #444);
+      border-radius: 8px;
+      padding: 0;
+      background: none;
+      cursor: pointer;
+    }
+    
+    .color-hex {
+      font-family: monospace;
+      font-size: 14px;
+      padding: 8px 12px;
+      background: var(--tg-theme-bg-color, #222);
+      border: 1px solid var(--tg-theme-hint-color, #444);
+      border-radius: 6px;
+      color: var(--tg-theme-text-color, #fff);
+      min-width: 80px;
+      text-align: center;
+    }
+    
+    .preset-colors {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+    
+    .preset-btn {
+      aspect-ratio: 1;
+      border: 2px solid var(--tg-theme-hint-color, #444);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    
+    .preset-btn:active {
+      transform: scale(0.95);
+    }
+    
+    .toggle-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: var(--tg-theme-bg-color, #222);
+      border-radius: 8px;
+    }
+    
+    .toggle-label {
+      font-size: 14px;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 28px;
+      background: var(--tg-theme-hint-color, #444);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .toggle-switch.active {
+      background: var(--tg-theme-button-color, #3390ec);
+    }
+    
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+    }
+    
+    .toggle-switch.active::after {
+      transform: translateX(22px);
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    button {
+      flex: 1;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    
+    button:active {
+      opacity: 0.8;
+    }
+    
+    .btn-preview {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    
+    .btn-done {
+      background: var(--tg-theme-button-color, #3390ec);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    
+    .btn-secondary {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      color: var(--tg-theme-text-color, #fff);
+    }
+    
+    .limb-selector {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+    
+    .limb-btn {
+      padding: 10px;
+      background: var(--tg-theme-bg-color, #222);
+      border: 1px solid var(--tg-theme-hint-color, #444);
+      border-radius: 8px;
+      color: var(--tg-theme-text-color, #fff);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .limb-btn.active {
+      background: var(--tg-theme-button-color, #3390ec);
+      border-color: var(--tg-theme-button-color, #3390ec);
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Riglet Editor</h2>
+  </div>
+  
+  <div class="preview-container">
+    <div class="preview-placeholder" id="previewPlaceholder">
+      Your Riglet preview will appear here
+    </div>
+    <img class="preview-image hidden" id="previewImage" alt="Riglet Preview" />
+  </div>
+  
+  <div class="tools-container">
+    <!-- Global Colors -->
+    <div class="tool-section">
+      <div class="tool-section-title">Global Colors</div>
+      <div class="color-group">
+        <div class="color-row">
+          <span class="color-label">Fill:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="globalFill" value="#F1C799" />
+            <input type="text" class="color-hex" id="globalFillHex" value="#F1C799" maxlength="7" />
+          </div>
+        </div>
+        <div class="color-row">
+          <span class="color-label">Stroke:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="globalStroke" value="#000000" />
+            <input type="text" class="color-hex" id="globalStrokeHex" value="#000000" maxlength="7" />
+          </div>
+        </div>
+        <div class="color-row">
+          <span class="color-label">Stitch:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="globalStitch" value="#000000" />
+            <input type="text" class="color-hex" id="globalStitchHex" value="#000000" maxlength="7" />
+          </div>
+        </div>
+        <div class="preset-colors" id="presetColors"></div>
+      </div>
+    </div>
+    
+    <!-- Advanced Mode -->
+    <div class="tool-section">
+      <div class="tool-section-title">Advanced Coloring</div>
+      <div class="limb-selector" id="limbSelector"></div>
+      <div class="color-group hidden" id="advancedColors">
+        <div class="color-row">
+          <span class="color-label">Fill:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="advancedFill" value="#F1C799" />
+            <input type="text" class="color-hex" id="advancedFillHex" value="#F1C799" maxlength="7" />
+          </div>
+        </div>
+        <div class="color-row">
+          <span class="color-label">Stroke:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="advancedStroke" value="#000000" />
+            <input type="text" class="color-hex" id="advancedStrokeHex" value="#000000" maxlength="7" />
+          </div>
+        </div>
+        <div class="color-row">
+          <span class="color-label">Stitch:</span>
+          <div class="color-input-wrapper">
+            <input type="color" id="advancedStitch" value="#000000" />
+            <input type="text" class="color-hex" id="advancedStitchHex" value="#000000" maxlength="7" />
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Accessories -->
+    <div class="tool-section">
+      <div class="tool-section-title">Accessories</div>
+      <div class="toggle-group" id="accessoriesGroup"></div>
+    </div>
+    
+    <!-- Options -->
+    <div class="tool-section">
+      <div class="tool-section-title">Options</div>
+      <div class="toggle-group">
+        <div class="toggle-row">
+          <span class="toggle-label">Stitch Style (Hashed)</span>
+          <div class="toggle-switch active" id="stitchStyleToggle"></div>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Patch</span>
+          <div class="toggle-switch" id="patchToggle"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="button-group">
+      <button class="btn-preview" id="previewBtn">Preview</button>
+      <button class="btn-done" id="doneBtn">Done</button>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // Default state
+    const state = {
+      colors: {
+        Head: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
+        Left_Arm: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
+        Right_Arm: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
+        Left_Leg: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
+        Right_Leg: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
+        Body: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" }
+      },
+      stitch_hashed: true,
+      use_patch: false,
+      accessories: {
+        Halo: false,
+        Heart: false,
+        Wings: false,
+        CherryStem: false,
+        Bow: false,
+        Seeds: false
+      },
+      animation: "Default"
+    };
+
+    // Preset colors
+    const presets = [
+      { name: "Peach", hex: "#F1C799" },
+      { name: "Tan", hex: "#C88C55" },
+      { name: "Pink", hex: "#F49BC1" },
+      { name: "Blue", hex: "#8FC7FF" },
+      { name: "Mint", hex: "#A0FFD1" },
+      { name: "White", hex: "#FFFFFF" },
+      { name: "Black", hex: "#000000" }
+    ];
+
+    const limbs = ["Head", "Body", "Left_Arm", "Right_Arm", "Left_Leg", "Right_Leg"];
+    const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds"];
+
+    let currentLimb = null;
+    let isAdvancedMode = false;
+
+    // Initialize UI
+    function init() {
+      setupPresets();
+      setupLimbSelector();
+      setupAccessories();
+      setupColorInputs();
+      setupToggles();
+      setupButtons();
+      
+      // Try to load initial state from initData if available
+      if (tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+        try {
+          const savedState = JSON.parse(decodeURIComponent(tg.initDataUnsafe.start_param));
+          loadState(savedState);
+        } catch (e) {
+          console.log("No saved state found");
+        }
+      }
+    }
+
+    function setupPresets() {
+      const container = document.getElementById("presetColors");
+      presets.forEach(preset => {
+        const btn = document.createElement("button");
+        btn.className = "preset-btn";
+        btn.style.backgroundColor = preset.hex;
+        btn.title = preset.name;
+        btn.addEventListener("click", () => {
+          if (isAdvancedMode && currentLimb) {
+            applyColorToLimb(currentLimb, "fill", preset.hex);
+          } else {
+            applyGlobalColor("fill", preset.hex);
+          }
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function setupLimbSelector() {
+      const container = document.getElementById("limbSelector");
+      limbs.forEach(limb => {
+        const btn = document.createElement("button");
+        btn.className = "limb-btn";
+        btn.textContent = limb.replace("_", " ");
+        btn.addEventListener("click", () => {
+          currentLimb = limb;
+          isAdvancedMode = true;
+          document.querySelectorAll(".limb-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          document.getElementById("advancedColors").classList.remove("hidden");
+          updateAdvancedColors();
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function setupAccessories() {
+      const container = document.getElementById("accessoriesGroup");
+      accessories.forEach(acc => {
+        const row = document.createElement("div");
+        row.className = "toggle-row";
+        
+        const label = document.createElement("span");
+        label.className = "toggle-label";
+        label.textContent = acc;
+        
+        const toggle = document.createElement("div");
+        toggle.className = "toggle-switch";
+        toggle.addEventListener("click", () => {
+          state.accessories[acc] = !state.accessories[acc];
+          toggle.classList.toggle("active", state.accessories[acc]);
+        });
+        
+        row.appendChild(label);
+        row.appendChild(toggle);
+        container.appendChild(row);
+      });
+    }
+
+    function setupColorInputs() {
+      // Global colors
+      setupColorInput("globalFill", "globalFillHex", (val) => applyGlobalColor("fill", val));
+      setupColorInput("globalStroke", "globalStrokeHex", (val) => applyGlobalColor("stroke", val));
+      setupColorInput("globalStitch", "globalStitchHex", (val) => applyGlobalColor("stitch", val));
+      
+      // Advanced colors
+      setupColorInput("advancedFill", "advancedFillHex", (val) => {
+        if (currentLimb) applyColorToLimb(currentLimb, "fill", val);
+      });
+      setupColorInput("advancedStroke", "advancedStrokeHex", (val) => {
+        if (currentLimb) applyColorToLimb(currentLimb, "stroke", val);
+      });
+      setupColorInput("advancedStitch", "advancedStitchHex", (val) => {
+        if (currentLimb) applyColorToLimb(currentLimb, "stitch", val);
+      });
+    }
+
+    function setupColorInput(colorId, hexId, callback) {
+      const colorInput = document.getElementById(colorId);
+      const hexInput = document.getElementById(hexId);
+      
+      colorInput.addEventListener("input", (e) => {
+        const val = e.target.value.toUpperCase();
+        hexInput.value = val;
+        callback(val);
+      });
+      
+      hexInput.addEventListener("input", (e) => {
+        let val = e.target.value.toUpperCase();
+        if (!val.startsWith("#")) val = "#" + val;
+        if (/^#[0-9A-F]{6}$/.test(val)) {
+          colorInput.value = val;
+          callback(val);
+        }
+      });
+      
+      hexInput.addEventListener("blur", (e) => {
+        let val = e.target.value.toUpperCase();
+        if (!val.startsWith("#")) val = "#" + val;
+        if (!/^#[0-9A-F]{6}$/.test(val)) {
+          val = colorInput.value;
+          hexInput.value = val;
+        }
+      });
+    }
+
+    function setupToggles() {
+      const stitchToggle = document.getElementById("stitchStyleToggle");
+      stitchToggle.addEventListener("click", () => {
+        state.stitch_hashed = !state.stitch_hashed;
+        stitchToggle.classList.toggle("active", state.stitch_hashed);
+      });
+      
+      const patchToggle = document.getElementById("patchToggle");
+      patchToggle.addEventListener("click", () => {
+        state.use_patch = !state.use_patch;
+        patchToggle.classList.toggle("active", state.use_patch);
+      });
+    }
+
+    function setupButtons() {
+      document.getElementById("previewBtn").addEventListener("click", () => {
+        // Request preview from bot
+        sendState("preview");
+      });
+      
+      document.getElementById("doneBtn").addEventListener("click", () => {
+        // Send final state and close
+        sendState("done");
+      });
+    }
+
+    function applyGlobalColor(kind, hex) {
+      limbs.forEach(limb => {
+        if (state.colors[limb][kind] !== undefined) {
+          state.colors[limb][kind] = hex;
+        }
+      });
+      updateGlobalColors();
+    }
+
+    function applyColorToLimb(limb, kind, hex) {
+      if (state.colors[limb] && state.colors[limb][kind] !== undefined) {
+        state.colors[limb][kind] = hex;
+        updateAdvancedColors();
+      }
+    }
+
+    function updateGlobalColors() {
+      // Use first limb's colors as reference for global display
+      const ref = state.colors.Head;
+      document.getElementById("globalFill").value = ref.fill;
+      document.getElementById("globalFillHex").value = ref.fill;
+      document.getElementById("globalStroke").value = ref.stroke;
+      document.getElementById("globalStrokeHex").value = ref.stroke;
+      document.getElementById("globalStitch").value = ref.stitch;
+      document.getElementById("globalStitchHex").value = ref.stitch;
+    }
+
+    function updateAdvancedColors() {
+      if (!currentLimb) return;
+      const colors = state.colors[currentLimb];
+      document.getElementById("advancedFill").value = colors.fill || "#F1C799";
+      document.getElementById("advancedFillHex").value = colors.fill || "#F1C799";
+      document.getElementById("advancedStroke").value = colors.stroke || "#000000";
+      document.getElementById("advancedStrokeHex").value = colors.stroke || "#000000";
+      document.getElementById("advancedStitch").value = colors.stitch || "#000000";
+      document.getElementById("advancedStitchHex").value = colors.stitch || "#000000";
+    }
+
+    function loadState(savedState) {
+      if (savedState.colors) state.colors = savedState.colors;
+      if (savedState.stitch_hashed !== undefined) state.stitch_hashed = savedState.stitch_hashed;
+      if (savedState.use_patch !== undefined) state.use_patch = savedState.use_patch;
+      if (savedState.accessories) state.accessories = savedState.accessories;
+      if (savedState.animation) state.animation = savedState.animation;
+      
+      updateGlobalColors();
+      document.getElementById("stitchStyleToggle").classList.toggle("active", state.stitch_hashed);
+      document.getElementById("patchToggle").classList.toggle("active", state.use_patch);
+      
+      accessories.forEach((acc, idx) => {
+        const toggle = document.querySelectorAll("#accessoriesGroup .toggle-switch")[idx];
+        toggle.classList.toggle("active", state.accessories[acc]);
+      });
+    }
+
+    function sendState(action) {
+      const data = {
+        action: action,
+        colors: state.colors,
+        stitch_hashed: state.stitch_hashed,
+        use_patch: state.use_patch,
+        accessories: state.accessories,
+        animation: state.animation
+      };
+      
+      tg.sendData(JSON.stringify(data));
+      
+      if (action === "done") {
+        tg.close();
+      }
+    }
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>
+
