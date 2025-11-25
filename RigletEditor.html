@@ -151,8 +151,8 @@
     
     
     .toggle-group {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
     }
     
@@ -163,10 +163,22 @@
       padding: 12px;
       background: var(--tg-theme-bg-color, #222);
       border-radius: 8px;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .toggle-row-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
     }
     
     .toggle-label {
-      font-size: 14px;
+      font-size: 12px;
+      text-align: center;
+      word-wrap: break-word;
+      width: 100%;
     }
     
     .toggle-switch {
@@ -480,7 +492,7 @@
     <!-- Accessories -->
     <div class="tool-section">
       <div class="tool-section-title">Accessories</div>
-      <div class="toggle-group" id="accessoriesGroup"></div>
+      <div class="toggle-group" id="accessoriesGroup" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;"></div>
     </div>
     
     <!-- Draw Modal -->
@@ -892,14 +904,15 @@
       if (state.character === "Cherry" && char.accessorySections) {
         // Organize by sections for Cherry
         for (const [sectionName, sectionAccessories] of Object.entries(char.accessorySections)) {
-          // Section header
+          // Section header - spans full width
           const sectionHeader = document.createElement("div");
           sectionHeader.className = "tool-section-title";
           sectionHeader.style.marginTop = "16px";
+          sectionHeader.style.gridColumn = "1 / -1";
           sectionHeader.textContent = `📁 ${sectionName}`;
           container.appendChild(sectionHeader);
           
-          // Section accessories
+          // Section accessories - will be in grid
           sectionAccessories.forEach(acc => {
             const row = createAccessoryRow(acc, accessoryLayers);
             container.appendChild(row);
@@ -915,6 +928,7 @@
           const sectionHeader = document.createElement("div");
           sectionHeader.className = "tool-section-title";
           sectionHeader.style.marginTop = "16px";
+          sectionHeader.style.gridColumn = "1 / -1";
           sectionHeader.textContent = "📁 Other";
           container.appendChild(sectionHeader);
           
@@ -950,6 +964,10 @@
         "BoxingGloves": "Boxing Gloves",
       };
       
+      // Create content wrapper
+      const content = document.createElement("div");
+      content.className = "toggle-row-content";
+      
       const label = document.createElement("span");
       label.className = "toggle-label";
       label.textContent = displayNames[acc] || acc;
@@ -958,6 +976,7 @@
       rightSide.style.display = "flex";
       rightSide.style.alignItems = "center";
       rightSide.style.gap = "8px";
+      rightSide.style.justifyContent = "center";
       
       const toggle = document.createElement("div");
       toggle.className = "toggle-switch";
@@ -1032,8 +1051,9 @@
         }
       }
       
-      row.appendChild(label);
-      row.appendChild(rightSide);
+      content.appendChild(label);
+      content.appendChild(rightSide);
+      row.appendChild(content);
       return row;
     }
     
