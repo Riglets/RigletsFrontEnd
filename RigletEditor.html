@@ -518,8 +518,17 @@
       </div>
     </div>
     
-    <!-- Options -->
+    <!-- Character Switch -->
     <div class="tool-section">
+      <div class="tool-section-title">Character</div>
+      <div class="button-group" style="flex-direction: column; gap: 8px;">
+        <button class="btn-preset active" id="charRedo">Redo</button>
+        <button class="btn-preset" id="charCherry">Cherry</button>
+      </div>
+    </div>
+    
+    <!-- Options -->
+    <div class="tool-section" id="optionsSection">
       <div class="tool-section-title">Options</div>
       <div class="toggle-group">
         <div class="toggle-row">
@@ -528,7 +537,7 @@
         </div>
       </div>
       <div class="tool-section-title" style="margin-top: 16px;">Animation</div>
-      <div class="button-group" style="flex-direction: column; gap: 8px;">
+      <div class="button-group" style="flex-direction: column; gap: 8px;" id="animationButtons">
         <button class="btn-preset" id="animDefault">Default</button>
         <button class="btn-preset" id="animWave">Wave</button>
       </div>
@@ -573,6 +582,7 @@
 
     // Default state
     const state = {
+      character: "Redo",
       colors: {
         Head: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
         Left_Arm: { fill: "#F1C799", stroke: "#000000", stitch: "#000000" },
@@ -597,7 +607,78 @@
 
 
     const limbs = ["Head", "Body", "Left_Arm", "Right_Arm", "Left_Leg", "Right_Leg"];
-    const accessories = ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds", "TGpatch"];
+    
+    // Character configurations
+    const CHARACTERS = {
+      "Redo": {
+        accessories: ["Halo", "Heart", "Wings", "CherryStem", "Bow", "Seeds", "TGpatch"],
+        animations: {
+          "Default": "RigletTurn.json",
+          "Wave": "RigletBase.json"
+        },
+        defaultAnimation: "Default",
+        supportsColors: true,
+        supportsStitching: true
+      },
+      "Cherry": {
+        accessories: ["Halo", "Beak Mask", "Horns", "Wings", "Vest", "Vest Flannel", "Glove", "Shield", "Trident", "Sword", "Bow", "HaloPistol", "BoxingGloves", "Scarf", "Fairy", "Hearts", "CowboyHat", "CapHat", "Linkhat", "Duck Tail", "DevilTail"],
+        animations: {
+          "Shake": "CherryRigletShake.json"
+        },
+        defaultAnimation: "Shake",
+        supportsColors: false,
+        supportsStitching: false,
+        accessorySections: {
+          "Hats": ["CowboyHat", "Linkhat", "CapHat"],
+          "Left Hand": ["Sword", "Trident"],
+          "Right Hand": ["HaloPistol", "Bow", "Shield"],
+          "Tail": ["Duck Tail", "DevilTail"],
+          "Notes": ["BoxingGloves", "Fairy", "Hearts"]
+        }
+      }
+    };
+    
+    const ACCESSORY_LAYERS_REDO = {
+      "Halo": ["halofront", "haloback"],
+      "Heart": ["Heart", "CustomHeart"],
+      "Wings": ["Wings", "Wings 2"],
+      "CherryStem": ["CherryStem"],
+      "Bow": ["Bow"],
+      "Seeds": ["Seeds"],
+    };
+    
+    const ACCESSORY_LAYERS_CHERRY = {
+      "Halo": ["HaloFront", "HaloBack"],
+      "Beak Mask": ["BeakStrap", "Beak"],
+      "Horns": ["Horn1", "Horn2"],
+      "Wings": ["Wings", "Wings 2"],
+      "Vest": ["Vest"],
+      "Vest Flannel": ["YellowSleeve"],
+      "Glove": ["Glove"],
+      "Shield": ["Shield"],
+      "Trident": ["Trident"],
+      "Sword": ["Sword"],
+      "Bow": ["Bow"],
+      "HaloPistol": ["HaloPistol"],
+      "BoxingGloves": ["BoxingGlove", "BoxingGlove 2"],
+      "Scarf": ["Scarf"],
+      "Fairy": ["Fairy"],
+      "Hearts": ["Heart", "Heart2", "Heart3"],
+      "CowboyHat": ["CowboyHat"],
+      "CapHat": ["CapHat"],
+      "Linkhat": ["Linkhat"],
+      "Duck Tail": ["Tail"],
+      "DevilTail": ["DevilTail"],
+    };
+    
+    // Cherry default visible layers
+    // Note: Vest, Glove, Bow, HaloPistol, Sword, Trident, BoxingGlove 2 are now accessories and default to OFF
+    const CHERRY_DEFAULT_VISIBLE_LAYERS = [
+      "body", "Brow", "Mask", "Stem", "BeakStrap", "assrot", "ASS 2",
+      "leg R", "arm R", "line+FX", "cheek R", "eye R", "form",
+      "leg L", "HaloBack", "Beak",
+      "Note2", "Note3", "Note1"
+    ];
 
     // Riglet groups mapping (matches bot.py)
     const RIGLET_GROUPS = {
@@ -632,14 +713,8 @@
       },
     };
 
-    const ACCESSORY_LAYERS = {
-      "Halo": ["halofront", "haloback"],
-      "Heart": ["Heart", "CustomHeart"], // CustomHeart is used for custom drawn shapes
-      "Wings": ["Wings", "Wings 2"],
-      "CherryStem": ["CherryStem"],
-      "Bow": ["Bow"],
-      "Seeds": ["Seeds"],
-    };
+    // Backward compatibility
+    const ACCESSORY_LAYERS = ACCESSORY_LAYERS_REDO;
 
     const STITCH_DASH_LENGTH = 10.0;
 
@@ -673,6 +748,7 @@
       setupColorInputs();
       setupToggles();
       setupButtons();
+      setupCharacterSwitch();
       
       console.log("UI components set up");
       
@@ -714,76 +790,277 @@
       });
     }
 
+    function setupCharacterSwitch() {
+      const charRedo = document.getElementById("charRedo");
+      const charCherry = document.getElementById("charCherry");
+      
+      function updateCharacterButtons() {
+        charRedo.classList.toggle("active", state.character === "Redo");
+        charCherry.classList.toggle("active", state.character === "Cherry");
+      }
+      
+      charRedo.addEventListener("click", () => {
+        if (state.character !== "Redo") {
+          state.character = "Redo";
+          updateCharacterButtons();
+          updateUIForCharacter();
+        }
+      });
+      
+      charCherry.addEventListener("click", () => {
+        if (state.character !== "Cherry") {
+          state.character = "Cherry";
+          updateCharacterButtons();
+          updateUIForCharacter();
+        }
+      });
+      
+      updateCharacterButtons();
+    }
+    
+    function updateUIForCharacter() {
+      const char = CHARACTERS[state.character];
+      
+      // Update accessories
+      setupAccessories();
+      
+      // Update animation buttons
+      const animContainer = document.getElementById("animationButtons");
+      animContainer.innerHTML = "";
+      for (const animName in char.animations) {
+        const btn = document.createElement("button");
+        btn.className = "btn-preset";
+        btn.id = `anim${animName}`;
+        btn.textContent = animName;
+        btn.addEventListener("click", () => {
+          if (state.animation !== animName) {
+            state.animation = animName;
+            updateAnimationButtons();
+            loadAndRenderAnimation();
+          }
+        });
+        animContainer.appendChild(btn);
+      }
+      updateAnimationButtons();
+      
+      // Update animation to default
+      state.animation = char.defaultAnimation;
+      
+      // Show/hide color controls
+      const globalColors = document.querySelector(".tool-section:has(#globalFill)");
+      const advancedColors = document.querySelector(".tool-section:has(#limbSelector)");
+      if (globalColors) {
+        globalColors.style.display = char.supportsColors ? "block" : "none";
+      }
+      if (advancedColors) {
+        advancedColors.style.display = char.supportsColors ? "block" : "none";
+      }
+      
+      // Show/hide stitch toggle
+      const optionsSection = document.getElementById("optionsSection");
+      const stitchToggle = document.querySelector("#stitchStyleToggle").closest(".toggle-row");
+      if (stitchToggle) {
+        stitchToggle.style.display = char.supportsStitching ? "flex" : "none";
+      }
+      
+      // Reset accessories to character defaults
+      state.accessories = {};
+      char.accessories.forEach(acc => {
+        state.accessories[acc] = false;
+      });
+      
+      // Reload animation
+      loadAndRenderAnimation();
+    }
+    
+    function updateAnimationButtons() {
+      const char = CHARACTERS[state.character];
+      for (const animName in char.animations) {
+        const btn = document.getElementById(`anim${animName}`);
+        if (btn) {
+          btn.classList.toggle("active", state.animation === animName);
+        }
+      }
+    }
+
     function setupAccessories() {
       const container = document.getElementById("accessoriesGroup");
-      accessories.forEach((acc, idx) => {
-        const row = document.createElement("div");
-        row.className = "toggle-row";
-        
-        const label = document.createElement("span");
-        label.className = "toggle-label";
-        label.textContent = acc;
-        
-        const rightSide = document.createElement("div");
-        rightSide.style.display = "flex";
-        rightSide.style.alignItems = "center";
-        rightSide.style.gap = "8px";
-        
-        const toggle = document.createElement("div");
-        toggle.className = "toggle-switch";
-        if (state.accessories[acc]) {
-          toggle.classList.add("active");
+      container.innerHTML = "";
+      const char = CHARACTERS[state.character];
+      const accessoryLayers = state.character === "Cherry" ? ACCESSORY_LAYERS_CHERRY : ACCESSORY_LAYERS_REDO;
+      
+      if (state.character === "Cherry" && char.accessorySections) {
+        // Organize by sections for Cherry
+        for (const [sectionName, sectionAccessories] of Object.entries(char.accessorySections)) {
+          // Section header
+          const sectionHeader = document.createElement("div");
+          sectionHeader.className = "tool-section-title";
+          sectionHeader.style.marginTop = "16px";
+          sectionHeader.textContent = `📁 ${sectionName}`;
+          container.appendChild(sectionHeader);
+          
+          // Section accessories
+          sectionAccessories.forEach(acc => {
+            const row = createAccessoryRow(acc, accessoryLayers);
+            container.appendChild(row);
+          });
         }
         
-        // Add event listener directly here
-        toggle.addEventListener("click", () => {
-          state.accessories[acc] = !state.accessories[acc];
-          toggle.classList.toggle("active", state.accessories[acc]);
-          updatePreview();
-        });
+        // Other accessories (not in sections)
+        const otherAccessories = ["Halo", "Beak Mask", "Horns", "Wings", "Vest", "Vest Flannel", "Glove", "Scarf"];
+        const sectionAccessories = Object.values(char.accessorySections).flat();
+        const actualOtherAccessories = otherAccessories.filter(acc => !sectionAccessories.includes(acc));
         
-        rightSide.appendChild(toggle);
-        
-        // Add Draw button for Heart accessory
-        if (acc === "Heart") {
-          const drawBtn = document.createElement("button");
-          drawBtn.className = "btn-draw";
-          drawBtn.textContent = "Draw";
-          drawBtn.style.padding = "6px 10px";
-          drawBtn.style.fontSize = "11px";
-          drawBtn.addEventListener("click", () => {
-            openDrawModal("Heart");
-          });
-          rightSide.appendChild(drawBtn);
+        if (actualOtherAccessories.length > 0) {
+          const sectionHeader = document.createElement("div");
+          sectionHeader.className = "tool-section-title";
+          sectionHeader.style.marginTop = "16px";
+          sectionHeader.textContent = "📁 Other";
+          container.appendChild(sectionHeader);
           
-          // Add Reset button if custom shape exists
-          if (state.customShapes && state.customShapes["Heart"]) {
-            const resetBtn = document.createElement("button");
-            resetBtn.className = "btn-reset-shape";
-            resetBtn.textContent = "Reset";
-            resetBtn.style.padding = "6px 10px";
-            resetBtn.style.fontSize = "11px";
-            resetBtn.addEventListener("click", () => {
-              resetCustomShape("Heart");
-            });
-            rightSide.appendChild(resetBtn);
-            
-            // Add Edit button if custom shape exists
-            const editBtn = document.createElement("button");
-            editBtn.className = "btn-edit-shape";
-            editBtn.textContent = "Edit";
-            editBtn.style.padding = "6px 10px";
-            editBtn.style.fontSize = "11px";
-            editBtn.addEventListener("click", () => {
-              openDrawModal("Heart", true);
-            });
-            rightSide.appendChild(editBtn);
+          actualOtherAccessories.forEach(acc => {
+            const row = createAccessoryRow(acc, accessoryLayers);
+            container.appendChild(row);
+          });
+        }
+      } else {
+        // Redo character - original layout
+        const accessoryList = char.accessories;
+        accessoryList.forEach(acc => {
+          const row = createAccessoryRow(acc, accessoryLayers);
+          container.appendChild(row);
+        });
+      }
+    }
+    
+    function createAccessoryRow(acc, accessoryLayers) {
+      const row = document.createElement("div");
+      row.className = "toggle-row";
+      
+      // Display names for Cherry
+      const displayNames = {
+        "CowboyHat": "Cowboy Hat",
+        "Linkhat": "Link Hat",
+        "CapHat": "Cap",
+        "Sword": "Master Sword",
+        "HaloPistol": "M6D Pistol",
+        "Shield": "Hyrule Shield",
+        "Duck Tail": "Duck Tail",
+        "DevilTail": "Devil Tail",
+        "BoxingGloves": "Boxing Gloves",
+      };
+      
+      const label = document.createElement("span");
+      label.className = "toggle-label";
+      label.textContent = displayNames[acc] || acc;
+      
+      const rightSide = document.createElement("div");
+      rightSide.style.display = "flex";
+      rightSide.style.alignItems = "center";
+      rightSide.style.gap = "8px";
+      
+      const toggle = document.createElement("div");
+      toggle.className = "toggle-switch";
+      if (state.accessories[acc]) {
+        toggle.classList.add("active");
+      }
+      
+      // Add event listener
+      toggle.addEventListener("click", () => {
+        const newState = !state.accessories[acc];
+        
+        // Cherry character: Handle section exclusivity
+        if (state.character === "Cherry" && newState && CHARACTERS[state.character].accessorySections) {
+          // Find which section this accessory belongs to
+          for (const [sectionName, sectionAccessories] of Object.entries(CHARACTERS[state.character].accessorySections)) {
+            if (sectionAccessories.includes(acc)) {
+              // Turn off all other accessories in this section
+              sectionAccessories.forEach(otherAcc => {
+                if (otherAcc !== acc) {
+                  state.accessories[otherAcc] = false;
+                }
+              });
+              break;
+            }
           }
         }
         
-        row.appendChild(label);
-        row.appendChild(rightSide);
-        container.appendChild(row);
+        state.accessories[acc] = newState;
+        toggle.classList.toggle("active", newState);
+        
+        // Update all toggles in case section exclusivity changed them
+        updateAccessoryToggles();
+        updatePreview();
+      });
+        
+      rightSide.appendChild(toggle);
+      
+      // Add Draw button for Heart accessory (Redo only)
+      if (acc === "Heart" && state.character === "Redo") {
+        const drawBtn = document.createElement("button");
+        drawBtn.className = "btn-draw";
+        drawBtn.textContent = "Draw";
+        drawBtn.style.padding = "6px 10px";
+        drawBtn.style.fontSize = "11px";
+        drawBtn.addEventListener("click", () => {
+          openDrawModal("Heart");
+        });
+        rightSide.appendChild(drawBtn);
+        
+        // Add Reset button if custom shape exists
+        if (state.customShapes && state.customShapes["Heart"]) {
+          const resetBtn = document.createElement("button");
+          resetBtn.className = "btn-reset-shape";
+          resetBtn.textContent = "Reset";
+          resetBtn.style.padding = "6px 10px";
+          resetBtn.style.fontSize = "11px";
+          resetBtn.addEventListener("click", () => {
+            resetCustomShape("Heart");
+          });
+          rightSide.appendChild(resetBtn);
+          
+          // Add Edit button if custom shape exists
+          const editBtn = document.createElement("button");
+          editBtn.className = "btn-edit-shape";
+          editBtn.textContent = "Edit";
+          editBtn.style.padding = "6px 10px";
+          editBtn.style.fontSize = "11px";
+          editBtn.addEventListener("click", () => {
+            openDrawModal("Heart", true);
+          });
+          rightSide.appendChild(editBtn);
+        }
+      }
+      
+      row.appendChild(label);
+      row.appendChild(rightSide);
+      return row;
+    }
+    
+    function updateAccessoryToggles() {
+      const container = document.getElementById("accessoriesGroup");
+      const toggles = container.querySelectorAll(".toggle-switch");
+      const labels = container.querySelectorAll(".toggle-label");
+      
+      toggles.forEach((toggle, idx) => {
+        const label = labels[idx];
+        if (!label) return;
+        
+        // Find the accessory name from the label
+        const displayNames = {
+          "Cowboy Hat": "CowboyHat",
+          "Link Hat": "Linkhat",
+          "Cap": "CapHat",
+          "Master Sword": "Sword",
+          "M6D Pistol": "HaloPistol",
+          "Hyrule Shield": "Shield",
+          "Duck Tail": "Duck Tail",
+          "Devil Tail": "DevilTail",
+          "Boxing Gloves": "BoxingGloves",
+        };
+        const accName = displayNames[label.textContent] || label.textContent;
+        
+        toggle.classList.toggle("active", state.accessories[accName] || false);
       });
     }
 
@@ -847,33 +1124,6 @@
         stitchToggle.classList.toggle("active", state.stitch_hashed);
         updatePreview();
       });
-      
-      // Animation selection
-      const animDefault = document.getElementById("animDefault");
-      const animWave = document.getElementById("animWave");
-      
-      function updateAnimationButtons() {
-        animDefault.classList.toggle("active", state.animation === "Default");
-        animWave.classList.toggle("active", state.animation === "Wave");
-      }
-      
-      animDefault.addEventListener("click", () => {
-        if (state.animation !== "Default") {
-          state.animation = "Default";
-          updateAnimationButtons();
-          loadAndRenderAnimation();
-        }
-      });
-      
-      animWave.addEventListener("click", () => {
-        if (state.animation !== "Wave") {
-          state.animation = "Wave";
-          updateAnimationButtons();
-          loadAndRenderAnimation();
-        }
-      });
-      
-      updateAnimationButtons();
     }
 
     function setupButtons() {
@@ -1826,6 +2076,7 @@
     }
 
     function loadState(savedState) {
+      if (savedState.character) state.character = savedState.character;
       if (savedState.colors) state.colors = savedState.colors;
       if (savedState.stitch_hashed !== undefined) state.stitch_hashed = savedState.stitch_hashed;
       // Handle legacy use_patch - migrate to TGpatch accessory
@@ -1835,30 +2086,14 @@
       if (savedState.accessories) state.accessories = savedState.accessories;
       if (savedState.animation) {
         state.animation = savedState.animation;
-        // Reload animation if it changed
-        if (baseAnimationData) {
-          loadAndRenderAnimation();
-        }
       }
       if (savedState.customShapes) state.customShapes = savedState.customShapes;
       
-      // Update animation buttons if they exist
-      if (document.getElementById("animDefault")) {
-        const animDefault = document.getElementById("animDefault");
-        const animWave = document.getElementById("animWave");
-        animDefault.classList.toggle("active", state.animation === "Default");
-        animWave.classList.toggle("active", state.animation === "Wave");
-      }
+      // Update UI for character
+      updateUIForCharacter();
       
       updateGlobalColors();
       document.getElementById("stitchStyleToggle").classList.toggle("active", state.stitch_hashed);
-      
-      accessories.forEach((acc, idx) => {
-        const toggle = document.querySelectorAll("#accessoriesGroup .toggle-switch")[idx];
-        if (toggle) {
-        toggle.classList.toggle("active", state.accessories[acc]);
-        }
-      });
       
       // Update preview if animation is already loaded
       if (baseAnimationData) {
@@ -1873,7 +2108,8 @@
           throw new Error("Lottie library not loaded");
         }
         
-        const animationFile = state.animation === "Wave" ? "RigletBase.json" : "RigletTurn.json";
+        const char = CHARACTERS[state.character];
+        const animationFile = char.animations[state.animation] || char.animations[char.defaultAnimation];
         const url = `https://riglets.github.io/RigletsFrontEnd/${animationFile}`;
         
         console.log("Loading animation from:", url);
@@ -1925,8 +2161,13 @@
       
       console.log("Applying stitch_hashed:", stitchHashed);
       
-      // Apply colors
-      for (const layer of animData.layers || []) {
+      // Only apply colors for Redo character
+      if (state.character !== "Redo") {
+        // Skip color application for Cherry
+        console.log("Skipping color application for Cherry character");
+      } else {
+        // Apply colors
+        for (const layer of animData.layers || []) {
         const layerName = layer.nm;
         
         // Skip layers that have custom shapes (they'll be handled separately with custom colors)
@@ -2116,14 +2357,37 @@
           }
         }
       }
+      } // End of Redo color application
+      
+      // Cherry character: Set default visible layers first
+      if (state.character === "Cherry") {
+        // First, hide all layers by default (except resize, squash, master)
+        for (const layer of animData.layers || []) {
+          const layerName = layer.nm || "";
+          if (!["resize", "squash", "master"].includes(layerName)) {
+            layer.hd = true;
+          }
+        }
+        
+        // Then show default visible layers
+        for (const layer of animData.layers || []) {
+          const layerName = layer.nm || "";
+          if (CHERRY_DEFAULT_VISIBLE_LAYERS.includes(layerName)) {
+            layer.hd = false;
+          }
+        }
+      }
       
       // Apply accessories visibility and custom shapes
       // IMPORTANT: This must run AFTER applyColorsToAnimation to ensure custom colors aren't overwritten
       console.log("Checking for custom shapes. state.customShapes:", state.customShapes);
       console.log("Available layers:", animData.layers?.map(l => l.nm) || []);
+      
+      const accessoryLayers = state.character === "Cherry" ? ACCESSORY_LAYERS_CHERRY : ACCESSORY_LAYERS_REDO;
+      
       for (const layer of animData.layers || []) {
         const layerName = layer.nm;
-        for (const [accName, layerNames] of Object.entries(ACCESSORY_LAYERS)) {
+        for (const [accName, layerNames] of Object.entries(accessoryLayers)) {
           if (layerNames.includes(layerName)) {
             console.log(`Layer ${layerName} matches accessory ${accName} (layers: ${layerNames.join(", ")})`);
             const isEnabled = state.accessories[accName];
@@ -2170,15 +2434,79 @@
         }
       }
       
-      // Apply patch visibility - remove TGpatch from Left_Leg if patch is off
-      for (const layer of animData.layers || []) {
-        if (layer.nm === "Left_Leg" && layer.shapes) {
-          layer.shapes = layer.shapes.filter(shape => {
-            if (shape.nm === "TGpatch" && !state.accessories.TGpatch) {
-              return false; // Remove patch
+      // Cherry-specific: Handle hat logic (turn off Stem and Mask when hats are on)
+      if (state.character === "Cherry") {
+        const hatAccessories = ["CowboyHat", "Linkhat", "CapHat"];
+        const anyHatEnabled = hatAccessories.some(hat => state.accessories[hat]);
+        
+        if (anyHatEnabled) {
+          // Turn off Stem and Mask when any hat is enabled
+          for (const layer of animData.layers || []) {
+            const layerName = layer.nm || "";
+            if (layerName === "Stem" || layerName === "Mask") {
+              layer.hd = true;
             }
-            return true; // Keep other shapes
-          });
+          }
+        } else {
+          // Turn on Stem and Mask when no hats are enabled (if they were in default visible)
+          for (const layer of animData.layers || []) {
+            const layerName = layer.nm || "";
+            if ((layerName === "Stem" || layerName === "Mask") && CHERRY_DEFAULT_VISIBLE_LAYERS.includes(layerName)) {
+              layer.hd = false;
+            }
+          }
+        }
+        
+        // Handle Vest: if Vest is OFF, hide it
+        const vestEnabled = state.accessories["Vest"];
+        for (const layer of animData.layers || []) {
+          if (layer.nm === "Vest") {
+            layer.hd = !vestEnabled; // Hide if disabled, show if enabled
+          }
+        }
+        
+        // Handle Vest Flannel (YellowSleeve is part of Vest)
+        const vestFlannelEnabled = state.accessories["Vest Flannel"];
+        for (const layer of animData.layers || []) {
+          if (layer.nm === "YellowSleeve") {
+            layer.hd = !vestFlannelEnabled; // Show if enabled, hide if disabled
+          }
+        }
+        
+        // Handle Notes section: Hide Note1, Note2, Note3 when any Notes accessory is enabled
+        const notesAccessories = ["BoxingGloves", "Fairy", "Hearts"];
+        const anyNotesEnabled = notesAccessories.some(acc => state.accessories[acc]);
+        
+        if (anyNotesEnabled) {
+          // Hide Note1, Note2, Note3 when any Notes accessory is enabled
+          for (const layer of animData.layers || []) {
+            const layerName = layer.nm || "";
+            if (layerName === "Note1" || layerName === "Note2" || layerName === "Note3") {
+              layer.hd = true;
+            }
+          }
+        } else {
+          // Show Note1, Note2, Note3 when no Notes accessories are enabled (they're in default visible)
+          for (const layer of animData.layers || []) {
+            const layerName = layer.nm || "";
+            if ((layerName === "Note1" || layerName === "Note2" || layerName === "Note3") && CHERRY_DEFAULT_VISIBLE_LAYERS.includes(layerName)) {
+              layer.hd = false;
+            }
+          }
+        }
+      }
+      
+      // Apply patch visibility - remove TGpatch from Left_Leg if patch is off (Redo only)
+      if (state.character === "Redo") {
+        for (const layer of animData.layers || []) {
+          if (layer.nm === "Left_Leg" && layer.shapes) {
+            layer.shapes = layer.shapes.filter(shape => {
+              if (shape.nm === "TGpatch" && !state.accessories.TGpatch) {
+                return false; // Remove patch
+              }
+              return true; // Keep other shapes
+            });
+          }
         }
       }
       
@@ -2401,6 +2729,7 @@
     function sendState(action) {
       const data = {
         action: action,
+        character: state.character,
         colors: state.colors,
         stitch_hashed: state.stitch_hashed,
         use_patch: state.accessories.TGpatch, // Map TGpatch to use_patch for bot compatibility
